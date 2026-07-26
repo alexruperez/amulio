@@ -1,4 +1,6 @@
 .env
+secrets/
+compose.local.yaml
 .venv/
 __pycache__/
 .pytest_cache/
