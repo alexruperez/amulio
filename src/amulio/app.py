@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.amule_api = AmuleApiClient(
         base_url=str(settings.amule_api_base_url),
-        admin_password=settings.amule_api_admin_password.get_secret_value(),
+        admin_password=settings.amule_api_admin_password.get_secret_value(),  # type: ignore[union-attr]
     )
     app.state.metadata = CinemetaClient(
         base_url=str(settings.cinemeta_base_url),

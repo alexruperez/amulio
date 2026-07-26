@@ -5,31 +5,56 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      AMULE_API_ADMIN_PASSWORD_FILE: /run/secrets/amuleapi_admin_password
     volumes:
       # Keep this path identical to aMule's Incoming directory.
-      - ${AMULE_INCOMING_HOST_PATH:-./data/incoming}:/data/incoming:ro
+      - amule_incoming:/data/incoming:ro
+    secrets:
+      - amuleapi_admin_password
     ports:
       - "${AMULIO_PORT:-8000}:8000"
+    depends_on:
+      amuleapi:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 4
     networks: [frontend, backend]
 
-  # amuleapi must be built from aMule master with BUILD_AMULEAPI=ON until 3.1.0 ships.
-  # It intentionally has no published port; aMulio is its only HTTP client.
   amuleapi:
-    image: ${AMULE_API_IMAGE:-ghcr.io/replace-me/amuleapi:master}
-    profiles: [amule]
+    build:
+      context: .
+      dockerfile: docker/amuleapi/Dockerfile
     restart: unless-stopped
-    environment:
-      AMULEAPI_BIND: 0.0.0.0
     volumes:
-      - ${AMULE_INCOMING_HOST_PATH:-./data/incoming}:/data/incoming
-      - ${AMULE_TEMP_HOST_PATH:-./data/temp}:/data/temp
+      - amule_incoming:/data/incoming
+      - amule_temp:/data/temp
       - amule_config:/data/config
+    secrets:
+      - amule_ec_password
+      - amuleapi_admin_password
     expose:
       - "4713"
     networks: [backend]
 
 volumes:
   amule_config:
+  amule_incoming:
+  amule_temp:
+
+secrets:
+  amule_ec_password:
+    file: ${AMULE_EC_PASSWORD_FILE:-./secrets/amule_ec_password}
+  amuleapi_admin_password:
+    file: ${AMULEAPI_ADMIN_PASSWORD_FILE:-./secrets/amuleapi_admin_password}
 
 networks:
   frontend:

@@ -127,9 +127,22 @@ uv run uvicorn amulio.app:app --reload
 Open `http://127.0.0.1:8000/configure` to obtain the private manifest URL for
 Stremio.
 
-The supplied `compose.yaml` defines aMulio and the private `amuleapi` network.
-Until aMule 3.1 is released, set `AMULE_API_IMAGE` to an image built from a
-pinned aMule `master` commit with `BUILD_AMULEAPI=ON`.
+The supplied `compose.yaml` builds the pinned `amuled` + `amuleapi` image
+locally. Before starting it, create two files outside Git with high-entropy
+passwords and point the matching variables in `.env` at them:
+
+```sh
+mkdir -p secrets
+chmod 700 secrets
+openssl rand -base64 32 > secrets/amule_ec_password
+openssl rand -base64 32 > secrets/amuleapi_admin_password
+chmod 600 secrets/*
+docker compose up --build -d
+```
+
+Compose keeps aMule EC and amuleapi internal to the backend network. It uses
+named volumes for config, Temp and Incoming; only aMulio gets the latter, at
+`/data/incoming`, as read-only.
 
 ## Security and privacy
 
