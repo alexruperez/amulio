@@ -112,9 +112,9 @@ Stremio displays a purposeful status video rather than a playback error.
 
 ### 3.1 Build integration fixtures
 
-- [ ] Run a real `amuled` + `amuleapi` fixture in Docker.
-- [ ] Use a legal, small media fixture to validate completed-file discovery.
-- [ ] Verify file movement from Temp to Incoming and hash-based re-resolution.
+- [x] Run a real `amuled` + `amuleapi` fixture in Docker.
+- [x] Use a self-produced, small MP4 fixture to validate completed-file discovery.
+- [x] Verify hash-based re-resolution through a shared Incoming mount.
 
 ### 3.2 Test playback semantics
 

@@ -1,0 +1,67 @@
+FROM debian:bookworm-slim
+
+ARG AMULE_REF=7958b6926910b1f59b477b146bcf8882139f9558
+ARG WX_REF=5ff25322553c1870cf20a2e1ba6f20ed50d9fe9a
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        git \
+        libboost-dev \
+        libcrypto++-dev \
+        libcurl4-openssl-dev \
+        libglib2.0-dev \
+        libgtk-3-dev \
+        libwxgtk3.2-dev \
+        pkg-config \
+        python3 \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/wxwidgets
+RUN git clone https://github.com/wxWidgets/wxWidgets.git source \
+    && git -C source checkout --force "$WX_REF" \
+    && git -C source submodule update --init --recursive \
+    && cd source \
+    && ./configure \
+        --prefix=/usr/local \
+        --with-gtk=3 \
+        --with-libcurl \
+        --enable-unicode \
+        --enable-shared \
+        --disable-debug \
+        --disable-mediactrl \
+        --disable-webview \
+        --disable-richtext \
+        --disable-aui \
+    && make -j"$(nproc)" \
+    && make install \
+    && ldconfig
+
+WORKDIR /build
+RUN git clone https://github.com/amule-org/amule.git source \
+    && git -C source checkout "$AMULE_REF" \
+    && cmake -S source -B build \
+        -DBUILD_MONOLITHIC=NO \
+        -DBUILD_DAEMON=YES \
+        -DBUILD_AMULEAPI=YES \
+        -DBUILD_ED2K=NO \
+        -DCRYPTOPP_INCLUDE_PREFIX=crypto++ \
+        -DENABLE_NLS=NO \
+        -DENABLE_UPNP=NO \
+        -DENABLE_IP2COUNTRY=NO \
+    && cmake --build build -j"$(nproc)" \
+    && cmake --install build
+
+# Prefer the wxWidgets build above at runtime. Debian's wx 3.2 package does not
+# include the libcurl web-session backend that amuleapi requires.
+RUN rm -f /lib/*-linux-gnu/libwx*.so* && ldconfig
+
+RUN mkdir -p /data/config /data/incoming /data/temp
+COPY src/amulio/assets/download-started.mp4 /data/incoming/amulio-fixture.mp4
+COPY tests/integration/amuleapi-entrypoint.sh /usr/local/bin/amuleapi-fixture
+RUN chmod 755 /usr/local/bin/amuleapi-fixture
+
+EXPOSE 4713
+ENTRYPOINT ["/usr/local/bin/amuleapi-fixture"]

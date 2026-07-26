@@ -32,6 +32,7 @@ include = ["src/amulio/assets/*.mp4"]
 addopts = "-q"
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = ["integration: requires the Docker aMule/amuleapi fixture"]
 
 [tool.ruff]
 line-length = 100

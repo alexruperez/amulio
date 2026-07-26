@@ -1,0 +1,28 @@
+services:
+  amuleapi:
+    build:
+      context: ../..
+      dockerfile: tests/integration/Dockerfile.amuleapi
+    ports:
+      - "14713:4713"
+    volumes:
+      - incoming:/data/incoming
+
+  amulio:
+    build: ../..
+    depends_on:
+      - amuleapi
+    environment:
+      AMULIO_PUBLIC_URL: http://amulio:8000
+      AMULIO_INSTALL_TOKEN: integration-install-token-000000
+      AMULIO_TOKEN_SECRET: integration-token-secret-000000000000000000000000
+      AMULIO_ALLOWED_MEDIA_ROOTS: /data/incoming
+      AMULE_API_BASE_URL: http://amuleapi:4713/api/v0
+      AMULE_API_ADMIN_PASSWORD: fixture-admin-password
+    ports:
+      - "18000:8000"
+    volumes:
+      - incoming:/data/incoming:ro
+
+volumes:
+  incoming:
