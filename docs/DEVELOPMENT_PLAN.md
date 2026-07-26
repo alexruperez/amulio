@@ -36,8 +36,8 @@ later, opt-in experiment.
 | Downloading-state player UX | Done | Bundled status videos, live stream metadata and idempotent enqueueing. |
 | Reproducible aMule 3.1 image | Done | Multi-stage local build pins the upstream aMule and wxWidgets commits. |
 | Production Caddy deployment | Done for test instance | Caddy exposes HTTPS while EC and amuleapi remain private. |
-| Configuration experience | Prototype only | Functional install URL, but no settings model or production-quality UI. |
-| Branding and localisation | Not started | Manifest has no logo and user-facing strings are mixed-language. |
+| Configuration experience | In progress | Branded responsive install page, live readiness and revocable profiles; grouped UX and feedback tests remain. |
+| Branding and localisation | In progress | Official versioned logo, English default, Spanish flow and localised status videos ship; remaining strings and coverage are tracked in Phase 6. |
 | Click-to-download E2E | Implemented in code, not product-validated | Selecting a remote candidate queues it idempotently; the complete real-network journey still needs validation. |
 | Home Assistant app | Research complete; not started | Feasible as a single supervised image for `amuled`, `amuleapi` and aMulio. |
 
@@ -302,10 +302,10 @@ connector avoids opening an inbound web port on the Home Assistant host.
 
 ### 6.2 Replace the prototype configuration page
 
-- [ ] Build a responsive, accessible dark UI with Basic, Search, Language,
+- [x] Build a responsive, accessible dark UI with Basic, Search, Language,
   Storage and Advanced sections.
 - [x] Show live aMule EC, eD2K, Kad, Incoming storage and public-URL readiness.
-- [ ] Add **Install in Stremio** and **Copy manifest URL** actions with clear
+- [x] Add **Install in Stremio** and **Copy manifest URL** actions with clear
   success/error feedback.
 - [ ] Add UI tests for desktop/mobile layouts, keyboard operation, invalid
   settings and install-link generation.
@@ -395,11 +395,12 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-The public completed-file E2E is complete. The next work is **Phase 6.1:
-versioned configuration profiles**, followed by the configuration UI, official
-branding and English-first localisation. Phase 7 must then validate the real
-click-to-download journey. Home Assistant packaging follows in Phase 8.
-Progressive `.part` playback is deliberately deferred to Phase 9.
+The public completed-file E2E is complete and Phase 6.1 is delivered. Continue
+with **Phase 6.2**, finishing grouped configuration controls, install/copy
+feedback and UI coverage; then complete the remaining Phase 6.3 localisation
+work. Phase 7 must validate the real click-to-download journey. Home Assistant
+packaging follows in Phase 8. Progressive `.part` playback is deliberately
+deferred to Phase 9.
 
 CI enforces linting, tests, dependency audits, CodeQL and a coverage floor.
 

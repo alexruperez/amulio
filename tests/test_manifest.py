@@ -39,6 +39,11 @@ def test_stremio_tokenized_configuration_url_requires_the_installation_token(mon
     assert '<html lang="en">' in configured.text
     assert "Install in Stremio" in configured.text
     assert "Copy manifest URL" in configured.text
+    assert 'id="action-feedback"' in configured.text
+    assert "Opening Stremio…" in configured.text
+    assert "Basic" in configured.text
+    assert "Search" in configured.text
+    assert "Advanced" in configured.text
     assert rejected.status_code == 404
     get_settings.cache_clear()
 
@@ -71,6 +76,10 @@ def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
     assert "Estado de la instancia" in configured.text
     assert 'id="profile-form"' in configured.text
     assert "Ajustes del perfil" in configured.text
+    assert "Básico" in configured.text
+    assert "Búsqueda" in configured.text
+    assert "Avanzado" in configured.text
+    assert "Abriendo Stremio…" in configured.text
     assert "eD2K está desconectado" in configured.text
     get_settings.cache_clear()
 

@@ -72,7 +72,10 @@ services:
       - "4672:4672/udp"
     expose:
       - "4713"
-    networks: [backend]
+    # `backend` keeps the aMulio control API private. `egress` is deliberately
+    # separate so aMule can resolve DNS and reach eD2K/Kad without joining the
+    # Caddy-facing network.
+    networks: [backend, egress]
 
 volumes:
   amulio_data:
@@ -93,3 +96,5 @@ networks:
     driver: bridge
   backend:
     internal: true
+  egress:
+    driver: bridge

@@ -31,6 +31,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "copy": "Copy manifest URL",
         "copied": "Copied!",
         "copy_failed": "Copy failed — select the URL",
+        "install_feedback": "Opening Stremio…",
         "tip_label": "Tip:",
         "tip": (
             "if Stremio does not open automatically, copy this URL and paste it into "
@@ -60,8 +61,12 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_unavailable_detail": "Check the aMule connection and try again.",
         "profile_settings": "Profile settings",
         "profile_intro": "Create a private manifest with your own discovery preferences.",
+        "profile_basic": "Basic",
+        "profile_search": "Search",
+        "profile_advanced": "Advanced",
+        "storage_note": "Storage is managed by this self-hosted aMulio instance.",
         "admin_password": "Admin password",
-        "profile_language": "Result language",
+        "profile_language": "aMulio language",
         "search_languages": "Preferred search languages",
         "search_languages_hint": "Comma-separated language codes, for example en,es.",
         "result_limit": "Maximum results",
@@ -109,6 +114,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "copy": "Copiar URL del manifest",
         "copied": "¡Copiado!",
         "copy_failed": "No se pudo copiar — selecciona la URL",
+        "install_feedback": "Abriendo Stremio…",
         "tip_label": "Consejo:",
         "tip": (
             "si Stremio no se abre automáticamente, copia esta URL y pégala en el "
@@ -138,8 +144,12 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_unavailable_detail": "Comprueba la conexión de aMule y vuelve a intentarlo.",
         "profile_settings": "Ajustes del perfil",
         "profile_intro": "Crea un manifest privado con tus preferencias de búsqueda.",
+        "profile_basic": "Básico",
+        "profile_search": "Búsqueda",
+        "profile_advanced": "Avanzado",
+        "storage_note": "El almacenamiento lo gestiona esta instancia autoalojada de aMulio.",
         "admin_password": "Contraseña de administración",
-        "profile_language": "Idioma de los resultados",
+        "profile_language": "Idioma de aMulio",
         "search_languages": "Idiomas preferidos para buscar",
         "search_languages_hint": "Códigos de idioma separados por comas; por ejemplo en,es.",
         "result_limit": "Máximo de resultados",

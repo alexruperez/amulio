@@ -171,3 +171,39 @@ Common signals:
   amuleapi to investigate it remotely.
 - Metrics return 404: this is expected until `AMULIO_METRICS_TOKEN` is set;
   scrape with its Bearer token only from a trusted monitoring system.
+
+### eD2K or Kad stays disconnected
+
+aMule needs outbound Internet access to resolve DNS, download `server.met` and
+`nodes.dat`, and contact eD2K/Kad peers. The default Compose topology keeps
+the aMulio-to-amuleapi control path on the private `backend` network, while
+connecting **only** `amuleapi` to a second `egress` bridge network for that
+outbound traffic. Do not replace `egress` with the Caddy-facing `frontend`
+network and do not publish the EC (`4712`) or amuleapi (`4713`) ports.
+
+If the readiness screen reports eD2K as **Disconnected** for more than a few
+minutes after startup, diagnose it without printing secrets:
+
+```sh
+docker compose ps amuleapi
+docker compose logs --tail=200 amuleapi
+docker compose exec -T amuleapi sh -lc \
+  'wc -c /data/config/server.met; getent hosts upd.emule-security.org'
+```
+
+Healthy startup logs show a downloaded `server.met`, a non-zero server count,
+and an eD2K connection. A tiny `server.met` (or log messages such as `Could
+not resolve host`) usually means that `amuleapi` was attached only to an
+`internal: true` Docker network, or that outbound DNS is blocked by the host,
+provider or network policy. Restore the separate `egress` network and recreate
+only that service:
+
+```sh
+docker compose up -d --no-deps --force-recreate amuleapi
+docker compose ps amuleapi
+```
+
+For High ID, also allow inbound `4662/TCP` and `4672/UDP` in both the host and
+provider firewalls. Those are aMule peer ports and are intentionally public;
+they do not expose its control API. Keep the aMule image current and retain
+the default private control network.
