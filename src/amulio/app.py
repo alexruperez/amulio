@@ -694,7 +694,8 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
                 "unavailable",
                 "unknown",
             )
-        }
+        },
+        ensure_ascii=False,
     ).replace("</", "<\\/")
     language_links = " ".join(
         '<a href="?lang={language}"{current}>{label}</a>'.format(
@@ -734,6 +735,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       .status[data-state="connected"] .status-value, .status[data-state="ready"] .status-value, .status[data-state="configured"] .status-value {{ color: #8eeaac; }}
       .status[data-state="connecting"] .status-value {{ color: #f7d978; }}
       .status[data-state="unavailable"] .status-value, .status[data-state="disconnected"] .status-value {{ color: #f0a0a0; }}
+      .readiness-hint {{ margin: .8rem 0 0; color: #9dacbd; font-size: .82rem; line-height: 1.5; }}
       .features {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin: 0 0 2rem; }}
       .feature {{ min-height: 7.5rem; padding: 1rem; border-radius: 1rem; background: rgba(255,255,255,.055); color: #cbd5e1; font-size: .88rem; line-height: 1.45; }}
       .feature strong {{ display: block; margin-bottom: .3rem; color: #fff; font-size: .92rem; }}
@@ -783,6 +785,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             <div class="status" data-key="incoming_storage"><span class="status-label">{t("incoming_storage")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="public_url"><span class="status-label">{t("public_url")}</span><span class="status-value">{t("checking")}</span></div>
           </div>
+          <p class="readiness-hint" id="readiness-hint">{t("checking")}</p>
         </section>
         <div class="features">
           <div class="feature"><strong>{t("private_title")}</strong>{t("private_body")}</div>
@@ -838,7 +841,9 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       const profileFeedback = document.getElementById("profile-feedback");
       const profileSubmit = document.getElementById("profile-submit");
       const readiness = document.getElementById("readiness");
+      const readinessHint = document.getElementById("readiness-hint");
       const statusLabels = {status_labels};
+      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
       copyButton.addEventListener("click", async () => {{
         try {{
           await navigator.clipboard.writeText(manifestUrl);
@@ -857,12 +862,18 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             item.dataset.state = state;
             item.querySelector(".status-value").textContent = statusLabels[state] || statusLabels.unknown;
           }});
+          const hints = [];
+          if (states.amuleapi !== "connected") hints.push(readinessMessages.readiness_hint_unavailable);
+          if (states.ed2k === "disconnected") hints.push(readinessMessages.readiness_hint_disconnected);
+          if (states.kad === "connecting") hints.push(readinessMessages.readiness_hint_connecting);
+          readinessHint.textContent = hints.length ? hints.join(" ") : readinessMessages.readiness_hint_ready;
         }})
         .catch(() => {{
           readiness.querySelectorAll(".status").forEach((item) => {{
             item.dataset.state = "unavailable";
             item.querySelector(".status-value").textContent = statusLabels.unavailable;
           }});
+          readinessHint.textContent = readinessMessages.readiness_hint_unavailable;
         }});
       profileForm.addEventListener("submit", async (event) => {{
         event.preventDefault();

@@ -72,6 +72,16 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "profile_created": "Profile manifest created. Install this URL in Stremio.",
         "admin_disabled": "Profile management is not enabled on this instance.",
         "admin_failed": "Unable to create the profile. Check the admin password and try again.",
+        "readiness_hint_disconnected": (
+            "eD2K is disconnected, so remote searches may be unavailable."
+        ),
+        "readiness_hint_connecting": (
+            "Kad is still connecting; remote results can take a few minutes to appear."
+        ),
+        "readiness_hint_unavailable": (
+            "aMule is unavailable. Check the daemon and its private amuleapi connection."
+        ),
+        "readiness_hint_ready": "aMule is ready for local playback and remote discovery.",
     },
     "es": {
         "page_title": "Instala aMulio para Stremio",
@@ -140,6 +150,18 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "profile_created": "Manifest de perfil creado. Instala esta URL en Stremio.",
         "admin_disabled": "La gestión de perfiles no está activada en esta instancia.",
         "admin_failed": "No se pudo crear el perfil. Comprueba la contraseña e inténtalo de nuevo.",
+        "readiness_hint_disconnected": (
+            "eD2K está desconectado; las búsquedas remotas podrían no estar disponibles."
+        ),
+        "readiness_hint_connecting": (
+            "Kad sigue conectando; los resultados remotos pueden tardar unos minutos en aparecer."
+        ),
+        "readiness_hint_unavailable": (
+            "aMule no está disponible. Comprueba el daemon y su conexión privada con amuleapi."
+        ),
+        "readiness_hint_ready": (
+            "aMule está listo para reproducir archivos locales y descubrir contenido remoto."
+        ),
     },
 }
 
