@@ -31,7 +31,7 @@ later, opt-in experiment.
 | Candidate cache and filename ranking | Done | SQLite cache; title, year, episode, extension, quality and sources. |
 | Signed playback URLs | Done | Credentials are never exposed to Stremio. |
 | Completed-file playback | Done in code | Requires a real aMule/amuleapi instance and shared Incoming mount for integration validation. |
-| Download/shared SSE subscription | Partial | Event state is tracked; bootstrap snapshots and `resync` recovery remain. |
+| Download/shared SSE subscription | Done | Snapshot-then-stream reconciliation, `resync` recovery and monitor health are persisted. |
 | Downloading-state player UX | Not started | A selected unfinished stream currently returns HTTP 202; it needs a Stremio-friendly status video. |
 | Reproducible aMule 3.1 image | Not started | Compose currently expects a supplied `AMULE_API_IMAGE`. |
 | Production Caddy deployment | Not started | Local Compose only. |
@@ -83,12 +83,12 @@ episodes while keeping the intended release at the top.
 
 ### 2.1 Complete SSE state reconciliation
 
-- [ ] On startup, open the SSE stream, then take REST snapshots of downloads
+- [x] On startup, open the SSE stream, then take REST snapshots of downloads
   and shared files, then apply buffered events.
-- [ ] Persist live `status`, percent, speed, sources and update timestamp for
+- [x] Persist live `status`, percent, speed, sources and update timestamp for
   known hashes.
-- [ ] Handle `resync` by invalidating state and repeating the snapshot flow.
-- [ ] Reconnect with backoff and expose monitor health in `/health`.
+- [x] Handle `resync` by invalidating state and repeating the snapshot flow.
+- [x] Reconnect with backoff and expose monitor health in `/health`.
 
 **Acceptance:** restarting `amuleapi`, disconnecting it temporarily and
 resuming it leaves aMulio with correct ready/downloading states without a
@@ -186,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 2.1: SSE state reconciliation**. Discovery now has
-bounded, language-aware queries, hardened ranking and closes remote aMule
-search sessions.
+Continue with **Phase 2.2: the Stremio downloading experience**. Download
+state now reconciles through SSE plus REST snapshots and remains observable in
+`/health`.
 
 Before changing behavior, run:
 

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache
 from amulio.config import Settings, get_settings
-from amulio.events import monitor_events, stop_monitor
+from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.ranking import rank_results
@@ -63,8 +63,9 @@ async def lifespan(app: FastAPI):
     )
     app.state.cache = CandidateCache(settings.database_path)
     app.state.search_locks = MediaSearchLocks()
+    app.state.monitor_health = MonitorHealth()
     app.state.event_monitor = asyncio.create_task(
-        monitor_events(app.state.amule_api, app.state.cache),
+        monitor_events(app.state.amule_api, app.state.cache, health=app.state.monitor_health),
         name="amulio-amuleapi-events",
     )
     yield
@@ -228,9 +229,13 @@ async def _discover_candidates(
 
 
 @app.get("/health")
-async def health(api: ApiClient):
+async def health(request: Request, api: ApiClient):
     try:
-        return {"ok": True, "amule": await api.health()}
+        return {
+            "ok": True,
+            "amule": await api.health(),
+            "events": request.app.state.monitor_health.as_dict(),
+        }
     except AmuleApiError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

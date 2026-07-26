@@ -1,9 +1,20 @@
 import json
 import sqlite3
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from amulio.models import Candidate
+
+
+@dataclass(frozen=True)
+class FileState:
+    state: str
+    status: str | None
+    percent: float | None
+    speed_bps: int | None
+    sources_total: int | None
+    updated_at: int
 
 
 class CandidateCache:
@@ -26,10 +37,25 @@ class CandidateCache:
             CREATE TABLE IF NOT EXISTS file_state (
                 file_hash TEXT PRIMARY KEY,
                 state TEXT NOT NULL,
+                status TEXT,
+                percent REAL,
+                speed_bps INTEGER,
+                sources_total INTEGER,
                 updated_at INTEGER NOT NULL
             )
             """
         )
+        existing_columns = {
+            row[1] for row in self._connection.execute("PRAGMA table_info(file_state)")
+        }
+        for column, definition in (
+            ("status", "TEXT"),
+            ("percent", "REAL"),
+            ("speed_bps", "INTEGER"),
+            ("sources_total", "INTEGER"),
+        ):
+            if column not in existing_columns:
+                self._connection.execute(f"ALTER TABLE file_state ADD COLUMN {column} {definition}")
         self._connection.commit()
 
     def close(self) -> None:
@@ -59,17 +85,35 @@ class CandidateCache:
         )
         self._connection.commit()
 
-    def set_file_state(self, file_hash: str, state: str) -> None:
+    def set_file_state(
+        self,
+        file_hash: str,
+        state: str,
+        *,
+        status: str | None = None,
+        percent: float | None = None,
+        speed_bps: int | None = None,
+        sources_total: int | None = None,
+    ) -> None:
         self._connection.execute(
             """
-            INSERT INTO file_state (file_hash, state, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(file_hash) DO UPDATE SET
-                state = excluded.state,
-                updated_at = excluded.updated_at
+                INSERT INTO file_state
+                    (file_hash, state, status, percent, speed_bps, sources_total, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(file_hash) DO UPDATE SET
+                    state = excluded.state,
+                    status = excluded.status,
+                    percent = excluded.percent,
+                    speed_bps = excluded.speed_bps,
+                    sources_total = excluded.sources_total,
+                    updated_at = excluded.updated_at
             """,
-            (file_hash.lower(), state, int(time.time())),
+            (file_hash.lower(), state, status, percent, speed_bps, sources_total, int(time.time())),
         )
+        self._connection.commit()
+
+    def clear_file_states(self) -> None:
+        self._connection.execute("DELETE FROM file_state")
         self._connection.commit()
 
     def file_states(self, file_hashes: list[str]) -> dict[str, str]:
@@ -81,3 +125,13 @@ class CandidateCache:
             [file_hash.lower() for file_hash in file_hashes],
         ).fetchall()
         return dict(rows)
+
+    def file_state(self, file_hash: str) -> FileState | None:
+        row = self._connection.execute(
+            """
+            SELECT state, status, percent, speed_bps, sources_total, updated_at
+            FROM file_state WHERE file_hash = ?
+            """,
+            (file_hash.lower(),),
+        ).fetchone()
+        return FileState(*row) if row is not None else None

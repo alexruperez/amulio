@@ -73,6 +73,20 @@ class AmuleApiClient:
     async def stop_search(self, search_id: int, *, close: bool = True) -> None:
         await self._request("POST", "search/stop", json={"search_id": search_id, "close": close})
 
+    async def downloads(self) -> list[dict[str, Any]]:
+        response = await self._request("GET", "downloads")
+        downloads = response.json().get("downloads", [])
+        if not isinstance(downloads, list) or not all(isinstance(item, dict) for item in downloads):
+            raise AmuleApiError("amuleapi downloads response did not include a downloads list")
+        return downloads
+
+    async def shared_files(self) -> list[dict[str, Any]]:
+        response = await self._request("GET", "shared")
+        shared = response.json().get("shared", [])
+        if not isinstance(shared, list) or not all(isinstance(item, dict) for item in shared):
+            raise AmuleApiError("amuleapi shared response did not include a shared list")
+        return shared
+
     async def add_download(self, ed2k_link: str) -> None:
         await self._request("POST", "downloads", json={"ed2k_link": ed2k_link})
 
@@ -98,7 +112,9 @@ class AmuleApiClient:
         result = AmuleFile.model_validate(response.json())
         return result if result.status == "completed" else None
 
-    async def events(self) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    async def events(
+        self, *, connected: asyncio.Event | None = None
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         """Yield amuleapi SSE frames for downloads and shared files."""
         token = await self._login()
         async with self._client.stream(
@@ -110,6 +126,8 @@ class AmuleApiClient:
         ) as response:
             if response.is_error:
                 raise AmuleApiError(f"amuleapi events failed ({response.status_code})")
+            if connected is not None:
+                connected.set()
             event_name = "message"
             data_lines: list[str] = []
             async for line in response.aiter_lines():
