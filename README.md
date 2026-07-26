@@ -97,6 +97,9 @@ exposes per-part availability, but not a precise byte-range map or an API to
 prioritise the range requested by a player. Completed-file streaming is the
 reliable first milestone.
 
+The step-by-step implementation roadmap and acceptance gates live in
+[docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md).
+
 ## Requirements
 
 - A running `amuled` connected to eD2K/Kad.
