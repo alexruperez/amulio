@@ -54,6 +54,10 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_sources": "{total} sources ({complete} complete)",
         "stream_active_sources": "{count} active sources",
         "stream_quality_fallback": "video",
+        "stream_no_results": "No matching files found",
+        "stream_no_results_detail": "Try another title or check aMule network connectivity.",
+        "stream_unavailable": "aMule is unavailable",
+        "stream_unavailable_detail": "Check the aMule connection and try again.",
     },
     "es": {
         "page_title": "Instala aMulio para Stremio",
@@ -104,6 +108,10 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_sources": "{total} fuentes ({complete} completas)",
         "stream_active_sources": "{count} fuentes activas",
         "stream_quality_fallback": "vídeo",
+        "stream_no_results": "No se encontraron archivos coincidentes",
+        "stream_no_results_detail": "Prueba con otro título o revisa la conexión de red de aMule.",
+        "stream_unavailable": "aMule no está disponible",
+        "stream_unavailable_detail": "Comprueba la conexión de aMule y vuelve a intentarlo.",
     },
 }
 

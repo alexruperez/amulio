@@ -332,7 +332,7 @@ flow.
   **Downloading** labels and icons.
 - [ ] Present quality, size, language and sources without implying that a
   remote result is already cached.
-- [ ] Return a useful empty/error state when eD2K/Kad is disconnected or no
+- [x] Return a useful empty/error state when eD2K/Kad is disconnected or no
   acceptable candidate exists.
 
 ### 7.2 Exercise the real network journey

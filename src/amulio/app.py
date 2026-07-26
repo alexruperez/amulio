@@ -316,6 +316,15 @@ def _stream_response(candidates: list[Candidate], request: Request, cache: Candi
     }
 
 
+def _status_stream(settings: Settings, *, kind: str, label: str, detail: str) -> dict:
+    return {
+        "name": f"ℹ️ aMulio · {label}",
+        "description": detail,
+        "url": f"{str(settings.public_url).rstrip('/')}/assets/{kind}.mp4",
+        "behaviorHints": {"notWebReady": False},
+    }
+
+
 def _safe_media_path(file_path: str, *, settings: Settings) -> Path:
     try:
         resolved_path = Path(file_path).resolve(strict=True)
@@ -823,9 +832,29 @@ async def streams(
             settings=settings,
             search_locks=search_locks,
         )
-    except (AmuleApiError, MetadataError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (AmuleApiError, MetadataError):
+        return {
+            "streams": [
+                _status_stream(
+                    settings,
+                    kind="amule-unavailable",
+                    label=translate("en", "stream_unavailable"),
+                    detail=translate("en", "stream_unavailable_detail"),
+                )
+            ]
+        }
 
+    if not candidates:
+        return {
+            "streams": [
+                _status_stream(
+                    settings,
+                    kind="no-results",
+                    label=translate("en", "stream_no_results"),
+                    detail=translate("en", "stream_no_results_detail"),
+                )
+            ]
+        }
     return _stream_response(candidates, request, cache)
 
 

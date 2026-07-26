@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#273d58"/>
+  <circle cx="640" cy="245" r="72" fill="#82b6e8"/>
+  <circle cx="625" cy="230" r="24" stroke="#273d58" stroke-width="14" fill="none"/>
+  <path d="M645 250l28 28" stroke="#273d58" stroke-width="16" stroke-linecap="round"/>
+  <text x="640" y="405" text-anchor="middle" fill="white" font-family="Verdana, sans-serif" font-size="54" font-weight="bold">aMulio</text>
+  <text x="640" y="475" text-anchor="middle" fill="#dbeafa" font-family="Verdana, sans-serif" font-size="34">No matching files found</text>
+  <text x="640" y="535" text-anchor="middle" fill="#c0d7ed" font-family="Verdana, sans-serif" font-size="25">Try another title or check aMule network connectivity.</text>
+</svg>
