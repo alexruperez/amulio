@@ -6,11 +6,13 @@ import asyncio
 import html
 import json
 import logging
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import unquote
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -379,6 +381,9 @@ async def _discover_candidates(
     # Stremio uses tt<id>:<season>:<episode> for episodes, making this key
     # independently serialise every movie and episode lookup.
     media_key = f"{media_type}:{media_id}:{cache_scope}"
+    fixture = _e2e_fixture_candidate(media_type, media_id, settings)
+    if fixture is not None:
+        return [fixture]
     preferred_languages = preferences.search_languages if preferences else settings.search_languages
     allow_season_packs = (
         preferences.allow_season_packs if preferences else settings.allow_season_packs
@@ -465,6 +470,30 @@ async def _discover_candidates(
             ),
         )
         return candidates
+
+
+def _e2e_fixture_candidate(media_type: str, media_id: str, settings: Settings) -> Candidate | None:
+    """Return an explicitly configured private eD2K test fixture, if applicable."""
+    if media_type != "movie" or media_id != settings.e2e_fixture_media_id:
+        return None
+    link = settings.e2e_fixture_ed2k_link
+    if not link:
+        return None
+    match = re.fullmatch(r"ed2k://\|file\|([^|]+)\|(\d+)\|([0-9a-fA-F]{32})\|/", link)
+    if match is None:
+        logger.warning("Ignoring malformed AMULIO_E2E_FIXTURE_ED2K_LINK")
+        return None
+    name, size, file_hash = match.groups()
+    return Candidate(
+        name=unquote(name),
+        size=int(size),
+        hash=file_hash.lower(),
+        ed2k_link=link,
+        sources_total=1,
+        sources_complete=1,
+        release_group="E2E",
+        score=10_000,
+    )
 
 
 def _apply_profile_limits(

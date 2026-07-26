@@ -45,6 +45,16 @@ seed. Confirm its `shared` API reports the filename, eD2K hash and a completed
 source. Preserve the generated eD2K link and licence attribution in a private
 test record, not in Git.
 
+### Optional deterministic Stremio bridge
+
+When an eD2K server has not indexed the seed yet, a self-hosted test instance
+can opt into a single explicit fixture instead of waiting for discovery. Set
+`AMULIO_E2E_FIXTURE_MEDIA_ID` to the Cinemeta movie id and
+`AMULIO_E2E_FIXTURE_ED2K_LINK` to that fixture's legal eD2K link. aMulio then
+offers only that remote stream for that movie. Both settings default to empty;
+they are intended solely for controlled end-to-end tests and should be removed
+afterwards.
+
 ## Stremio journey
 
 1. Ensure both eD2K and Kad show **Connected** in aMulio.

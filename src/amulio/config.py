@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     manifest_rate_limit: int = Field(default=30, ge=1, le=10_000)
     stream_rate_limit: int = Field(default=30, ge=1, le=10_000)
     playback_rate_limit: int = Field(default=600, ge=1, le=100_000)
+    # Opt-in only: deterministic, legal end-to-end fixture for self-hosted
+    # deployments. It never has a default and is not intended as a catalogue.
+    e2e_fixture_media_id: str | None = None
+    e2e_fixture_ed2k_link: str | None = None
 
     @model_validator(mode="after")
     def load_password_files(self) -> "Settings":
