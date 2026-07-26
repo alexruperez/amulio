@@ -144,11 +144,13 @@ Compose keeps aMule EC and amuleapi internal to the backend network. It uses
 named volumes for config, Temp and Incoming; only aMulio gets the latter, at
 `/data/incoming`, as read-only.
 
-In production, Caddy is the only public service. It listens on ports 80 and
-443, obtains and renews HTTPS certificates automatically, and proxies requests
-to aMulio over the private Docker network. Set `CADDY_DOMAIN` to a DNS name
-that already resolves to the host and use its `https://` URL as
+In production, Caddy is the only public HTTP service. It listens on ports 80
+and 443, obtains and renews HTTPS certificates automatically, and proxies
+requests to aMulio over the private Docker network. Set `CADDY_DOMAIN` to a DNS
+name that already resolves to the host and use its `https://` URL as
 `AMULIO_PUBLIC_URL`; aMulio, aMule EC and amuleapi do not expose public ports.
+The separate `4662/TCP` and `4672/UDP` mappings are eD2K/Kad peer ports and
+must remain reachable for good aMule connectivity.
 
 ### Metrics and logs
 

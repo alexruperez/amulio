@@ -148,8 +148,10 @@ docker compose logs --tail=200 amulio amuleapi caddy
 ```
 
 Expected state: `caddy` publishes ports 80/443, `amulio` is healthy, and
-`amuleapi` is healthy but has no host port. The public endpoint is the Caddy
-domain, so verify it without printing the private installation URL:
+`amuleapi` is healthy with only eD2K/Kad peer ports `4662/TCP` and `4672/UDP`
+mapped to the host. Its EC and amuleapi control ports have no host mapping. The
+public HTTP endpoint is the Caddy domain, so verify it without printing the
+private installation URL:
 
 ```sh
 curl --fail --silent --show-error https://"$CADDY_DOMAIN"/health
@@ -159,6 +161,9 @@ Common signals:
 
 - Caddy cannot obtain a certificate: ensure `CADDY_DOMAIN` resolves to this
   host and ports 80 and 443 are reachable from the Internet.
+- aMule has Low ID or cannot find peers: allow `4662/TCP` and `4672/UDP` in the
+  host firewall and provider firewall. Do not expose `4712` (EC) or `4713`
+  (amuleapi).
 - aMulio reports HTTP 503: inspect `amuleapi` logs, then confirm the two secret
   files exist and retain mode `600`.
 - Stremio cannot play a completed file: confirm it exists in

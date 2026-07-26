@@ -66,6 +66,10 @@ services:
     secrets:
       - amule_ec_password
       - amuleapi_admin_password
+    # These are eD2K/Kad peer ports, not the private EC or amuleapi control ports.
+    ports:
+      - "4662:4662/tcp"
+      - "4672:4672/udp"
     expose:
       - "4713"
     networks: [backend]

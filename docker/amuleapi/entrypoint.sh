@@ -34,6 +34,8 @@ path, password = sys.argv[1:]
 content = open(path).read()
 for key, value in (
     ("AcceptExternalConnections", "1"),
+    ("TCPPort", "4662"),
+    ("UDPPort", "4672"),
     ("ECPort", "4712"),
     ("ECPassword", password),
     ("IncomingDir", "/data/incoming"),
