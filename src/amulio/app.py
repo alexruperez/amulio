@@ -1,4 +1,9 @@
+# ruff: noqa: E501
+# The embedded configuration page deliberately retains readable, browser-oriented
+# HTML and CSS rather than making the application depend on a templating stack.
+
 import asyncio
+import html
 import logging
 import secrets
 import time
@@ -9,6 +14,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
@@ -88,7 +94,10 @@ async def lifespan(app: FastAPI):
     app.state.profile_store.close()
 
 
+ASSET_DIRECTORY = Path(__file__).with_name("assets")
+
 app = FastAPI(title="aMulio", version="0.1.0", lifespan=lifespan)
+app.mount("/assets", StaticFiles(directory=ASSET_DIRECTORY), name="assets")
 app.add_middleware(
     CORSMiddleware,
     # The installation URL is a high-entropy bearer capability and no cookies are used.
@@ -107,6 +116,8 @@ def _observability_route(path: str) -> str:
         return "/{installation_token}/manifest.json"
     if "/stream/" in path:
         return "/{installation_token}/stream/{media_type}/{media_id}.json"
+    if path.startswith("/assets/"):
+        return "/assets/{asset}"
     return path if path in {"/", "/configure", "/health", "/metrics"} else "/unknown"
 
 
@@ -410,8 +421,84 @@ def _configuration_page(settings: Settings) -> str:
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/manifest.json"
     )
-    return f"""<!doctype html><html><body><h1>aMulio</h1>
-    <p>Instala este addon privado en Stremio:</p><code>{manifest_url}</code></body></html>"""
+    safe_manifest_url = html.escape(manifest_url)
+    stremio_url = html.escape(
+        "stremio://" + manifest_url.removeprefix("https://").removeprefix("http://")
+    )
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101827">
+    <title>Install aMulio for Stremio</title>
+    <style>
+      :root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; min-height: 100vh; color: #edf2f7; background: radial-gradient(circle at 20% 0%, #273f67 0, transparent 38rem), radial-gradient(circle at 100% 100%, #243b31 0, transparent 32rem), #101827; }}
+      main {{ width: min(100% - 2rem, 46rem); margin: 0 auto; padding: 4.5rem 0 3rem; }}
+      .brand {{ display: inline-flex; align-items: center; gap: .7rem; color: #fff; font-size: 1.35rem; font-weight: 700; text-decoration: none; }}
+      .brand img {{ width: 2.25rem; height: auto; image-rendering: auto; }}
+      .card {{ margin-top: 2.5rem; padding: clamp(1.5rem, 5vw, 3rem); border: 1px solid rgba(255,255,255,.12); border-radius: 1.5rem; background: rgba(18, 29, 47, .78); box-shadow: 0 2rem 5rem rgba(0,0,0,.28); backdrop-filter: blur(18px); }}
+      .eyebrow {{ margin: 0 0 .8rem; color: #78d39a; font-size: .75rem; font-weight: 800; letter-spacing: .12em; }}
+      h1 {{ max-width: 38rem; margin: 0; color: #fff; font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; }}
+      .intro {{ max-width: 40rem; margin: 1.25rem 0 2rem; color: #b9c5d4; font-size: 1.08rem; line-height: 1.65; }}
+      .features {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin: 0 0 2rem; }}
+      .feature {{ min-height: 7.5rem; padding: 1rem; border-radius: 1rem; background: rgba(255,255,255,.055); color: #cbd5e1; font-size: .88rem; line-height: 1.45; }}
+      .feature strong {{ display: block; margin-bottom: .3rem; color: #fff; font-size: .92rem; }}
+      label {{ display: block; margin-bottom: .7rem; color: #dbe5f0; font-size: .9rem; font-weight: 700; }}
+      code {{ display: block; overflow-wrap: anywhere; padding: 1rem 1.1rem; border: 1px solid rgba(255,255,255,.12); border-radius: .8rem; background: #09111f; color: #a7f3c3; font: .84rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }}
+      .actions {{ display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }}
+      .button {{ display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: .75rem 1.1rem; border: 1px solid transparent; border-radius: .75rem; color: #07110c; background: #7ce3a0; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }}
+      .button:hover {{ background: #9bf0b8; }}
+      .button.secondary {{ border-color: rgba(255,255,255,.18); color: #edf2f7; background: transparent; }}
+      .button.secondary:hover {{ background: rgba(255,255,255,.08); }}
+      .hint {{ margin: 1.1rem 0 0; color: #9dacbd; font-size: .86rem; line-height: 1.55; }}
+      .hint strong {{ color: #dbe5f0; }}
+      footer {{ margin-top: 1.5rem; color: #8190a4; font-size: .78rem; text-align: center; }}
+      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .button {{ width: 100%; }} }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="brand" href="/configure" aria-label="aMulio configuration">
+        <img src="/assets/amule-logo.png" alt="aMule logo">
+        <span>aMulio</span>
+      </a>
+      <section class="card" aria-labelledby="install-title">
+        <p class="eyebrow">YOUR PRIVATE STREMIO ADDON</p>
+        <h1 id="install-title">Connect Stremio to your aMule library.</h1>
+        <p class="intro">Find eD2K and Kad content, queue downloads with aMule, and play completed files from storage you control.</p>
+        <div class="features">
+          <div class="feature"><strong>Private by design</strong>Your manifest URL is a private capability.</div>
+          <div class="feature"><strong>Self-hosted</strong>aMule and your media stay under your control.</div>
+          <div class="feature"><strong>Ready to watch</strong>Completed media plays directly in Stremio.</div>
+        </div>
+        <label for="manifest-url">Your Stremio manifest URL</label>
+        <code id="manifest-url">{safe_manifest_url}</code>
+        <div class="actions">
+          <a class="button" href="{stremio_url}">Install in Stremio</a>
+          <button class="button secondary" type="button" id="copy-button">Copy manifest URL</button>
+        </div>
+        <p class="hint"><strong>Tip:</strong> if Stremio does not open automatically, copy this URL and paste it into Stremio's addon search. Keep it private.</p>
+      </section>
+      <footer>aMulio is a self-hosted Stremio addon powered by aMule.</footer>
+    </main>
+    <script>
+      const copyButton = document.getElementById("copy-button");
+      const manifestUrl = document.getElementById("manifest-url").textContent;
+      copyButton.addEventListener("click", async () => {{
+        try {{
+          await navigator.clipboard.writeText(manifestUrl);
+          copyButton.textContent = "Copied!";
+        }} catch {{
+          copyButton.textContent = "Copy failed — select the URL";
+        }}
+        window.setTimeout(() => {{ copyButton.textContent = "Copy manifest URL"; }}, 2400);
+      }});
+    </script>
+  </body>
+</html>"""
 
 
 @app.get("/{installation_token}/manifest.json")
@@ -429,7 +516,8 @@ async def manifest(installation_token: str, request: Request):
         "id": "com.alexruperez.amulio",
         "version": "0.1.0",
         "name": "aMulio",
-        "description": "Busca contenido eD2K/Kad y reproduce archivos completados de aMule.",
+        "description": "Search eD2K/Kad content and play completed files from aMule.",
+        "logo": f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png",
         "catalogs": [],
         "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],
         "types": ["movie", "series"],
