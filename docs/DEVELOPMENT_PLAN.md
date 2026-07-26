@@ -337,7 +337,9 @@ flow.
 
 ### 7.2 Exercise the real network journey
 
-- [ ] Publish or control a legal small eD2K fixture with known metadata.
+- [ ] Publish or control a legal small eD2K fixture with known metadata. See
+  [the controlled fixture runbook](E2E_FIXTURE.md); it is prepared but not
+  validated until the seed and downloader complete a real transfer.
 - [ ] From Stremio, select the remote fixture and prove one and only one
   download is queued in aMule.
 - [ ] Verify status refreshes across queued, downloading, completing and ready

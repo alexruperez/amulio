@@ -60,6 +60,16 @@ def test_rank_results_rejects_implausibly_small_and_large_video_files():
     assert rank_results(results, metadata) == []
 
 
+def test_rank_results_accepts_a_legal_short_film_without_a_quality_claim():
+    metadata = MediaMetadata(title="Big Buck Bunny", year=2008)
+    results = [
+        _result("Big.Buck.Bunny.2008.CC-BY-3.0.mp4", size=20_643_501),
+        _result("Big.Buck.Bunny.2008.CC-BY-3.0.mp4", "b" * 32, size=14_999_999),
+    ]
+
+    assert [candidate.hash for candidate in rank_results(results, metadata)] == ["a" * 32]
+
+
 def test_rank_results_rejects_episode_season_packs_unless_enabled():
     metadata = MediaMetadata(title="Example Show", season=2, episode=4)
     season_pack = _result("Example.Show.S02E04-E10.1080p.mkv")

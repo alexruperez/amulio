@@ -17,6 +17,7 @@ QUALITY_MINIMUM_SIZES = {
     "1080p": 700_000_000,
     "2160p": 2_000_000_000,
 }
+MINIMUM_SHORT_FILM_SIZE = 15_000_000
 LANGUAGE_TOKENS = {
     "en": {"en", "eng", "english"},
     "es": {"es", "esp", "spanish", "castellano"},
@@ -81,7 +82,9 @@ def _plausible_size(
     result: AmuleSearchResult, metadata: MediaMetadata, quality: str | None
 ) -> bool:
     is_episode = metadata.season is not None and metadata.episode is not None
-    minimum = 100_000_000 if is_episode else 300_000_000
+    # A short film can be both legitimate and substantially smaller than a
+    # feature film. Explicit quality labels still use their stricter minimums.
+    minimum = 100_000_000 if is_episode else MINIMUM_SHORT_FILM_SIZE
     maximum = 25_000_000_000 if is_episode else 80_000_000_000
     if quality is not None:
         minimum = max(minimum, QUALITY_MINIMUM_SIZES[quality])

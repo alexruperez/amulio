@@ -5,6 +5,10 @@ umask 077
 CONFIG_DIR=/data/config
 EC_PASSWORD_FILE=/run/secrets/amule_ec_password
 ADMIN_PASSWORD_FILE=/run/secrets/amuleapi_admin_password
+TCP_PORT=${AMULE_TCP_PORT:-4662}
+UDP_PORT=${AMULE_UDP_PORT:-4672}
+EC_PORT=${AMULE_EC_PORT:-4712}
+API_HTTP_PORT=${AMULE_API_HTTP_PORT:-4713}
 
 for secret_file in "$EC_PASSWORD_FILE" "$ADMIN_PASSWORD_FILE"; do
     if [[ ! -r "$secret_file" ]]; then
@@ -34,9 +38,9 @@ path, password = sys.argv[1:]
 content = open(path).read()
 for key, value in (
     ("AcceptExternalConnections", "1"),
-    ("TCPPort", "4662"),
-    ("UDPPort", "4672"),
-    ("ECPort", "4712"),
+    ("TCPPort", "${TCP_PORT}"),
+    ("UDPPort", "${UDP_PORT}"),
+    ("ECPort", "${EC_PORT}"),
     ("ECPassword", password),
     ("IncomingDir", "/data/incoming"),
     ("TempDir", "/data/temp"),
@@ -50,7 +54,7 @@ PY
 
 gosu amule amuleapi --config-dir="$CONFIG_DIR" --set-admin-pass="$ADMIN_PASSWORD"
 timeout 3 gosu amule amuleapi --config-dir="$CONFIG_DIR" --password="$EC_PASSWORD" \
-    --http-port=4713 >/dev/null 2>&1 || true
+    --port="$EC_PORT" --http-port="$API_HTTP_PORT" >/dev/null 2>&1 || true
 gosu amule python3 - "$CONFIG_DIR/amuleapi.conf" <<'PY'
 import re
 import sys
@@ -58,7 +62,7 @@ import sys
 path = sys.argv[1]
 content = open(path).read()
 content = re.sub(r"^BindAddress=.*$", "BindAddress=0.0.0.0", content, flags=re.MULTILINE)
-content = re.sub(r"^Port=.*$", "Port=4713", content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^Port=.*$", "Port=${API_HTTP_PORT}", content, count=1, flags=re.MULTILINE)
 open(path, "w").write(content)
 PY
 chown amule:amule "$CONFIG_DIR/amule.conf" "$CONFIG_DIR/amuleapi.conf"
@@ -66,10 +70,10 @@ chmod 600 "$CONFIG_DIR/amule.conf" "$CONFIG_DIR/amuleapi.conf"
 
 gosu amule amuled -c "$CONFIG_DIR" -o >"$CONFIG_DIR/amuled.log" 2>&1 &
 for _ in $(seq 1 30); do
-    if (echo > /dev/tcp/127.0.0.1/4712) 2>/dev/null; then
+if (echo > "/dev/tcp/127.0.0.1/$EC_PORT") 2>/dev/null; then
         break
     fi
     sleep 1
 done
-exec gosu amule amuleapi --config-dir="$CONFIG_DIR" --host=127.0.0.1 --port=4712 \
-    --password="$EC_PASSWORD" --http-port=4713 --bind=0.0.0.0 --no-log-file
+exec gosu amule amuleapi --config-dir="$CONFIG_DIR" --host=127.0.0.1 --port="$EC_PORT" \
+    --password="$EC_PASSWORD" --http-port="$API_HTTP_PORT" --bind=0.0.0.0 --no-log-file
