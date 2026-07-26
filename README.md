@@ -100,6 +100,12 @@ reliable first milestone.
 The step-by-step implementation roadmap and acceptance gates live in
 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md).
 
+The next MVP milestones prioritise a polished Torrentio/Comet-style
+configuration experience, official aMule branding, English-first localisation,
+an end-to-end **Download with aMule** flow and a novice-friendly Home Assistant
+app. Progressive playback of incomplete `.part` files is intentionally
+deferred until those product and distribution milestones are complete.
+
 ## Requirements
 
 - A running `amuled` connected to eD2K/Kad.

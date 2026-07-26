@@ -30,11 +30,16 @@ later, opt-in experiment.
 | aMule global and Kad search | Done | Uses authenticated `amuleapi` calls. |
 | Candidate cache and filename ranking | Done | SQLite cache; title, year, episode, extension, quality and sources. |
 | Signed playback URLs | Done | Credentials are never exposed to Stremio. |
-| Completed-file playback | Done in code | Requires a real aMule/amuleapi instance and shared Incoming mount for integration validation. |
+| Completed-file playback | Done and validated | Public HTTPS E2E test completed with Stremio Web and byte-range playback. |
+| Completed local-file discovery | Done and validated | Incoming files are matched to Cinemeta titles and shown as web-ready streams. |
 | Download/shared SSE subscription | Done | Snapshot-then-stream reconciliation, `resync` recovery and monitor health are persisted. |
 | Downloading-state player UX | Done | Bundled status videos, live stream metadata and idempotent enqueueing. |
 | Reproducible aMule 3.1 image | Done | Multi-stage local build pins the upstream aMule and wxWidgets commits. |
-| Production Caddy deployment | In progress | Caddy exposes only 80/443 and proxies HTTPS traffic to aMulio on the private frontend network. |
+| Production Caddy deployment | Done for test instance | Caddy exposes HTTPS while EC and amuleapi remain private. |
+| Configuration experience | Prototype only | Functional install URL, but no settings model or production-quality UI. |
+| Branding and localisation | Not started | Manifest has no logo and user-facing strings are mixed-language. |
+| Click-to-download E2E | Implemented in code, not product-validated | Selecting a remote candidate queues it idempotently; the complete real-network journey still needs validation. |
+| Home Assistant app | Research complete; not started | Feasible as a single supervised image for `amuled`, `amuleapi` and aMulio. |
 
 ## Development order
 
@@ -169,7 +174,211 @@ Compose and receives an authenticated `/health` response from aMulio.
 **Acceptance:** the deployment guide covers install, update, rollback, logs,
 backup and incident diagnosis without requiring source-code knowledge.
 
-## Phase 6 — Optional progressive playback experiment
+## MVP feedback research and product decisions
+
+The July 2026 public E2E test proved that Stremio can discover and play a
+completed file through aMulio. It also exposed the following MVP gaps, which
+take priority over incomplete `.part` playback.
+
+### Configuration UX
+
+[Torrentio](https://torrentio.strem.fun/configure) and
+[Comet](https://comet.elfhosted.com/configure) both use a branded, responsive
+configuration page with grouped controls, useful defaults, an explicit
+**Install** action and a **Copy link** fallback. Comet additionally hides
+secondary options in progressive sections so the initial experience stays
+approachable.
+
+aMulio will adopt those product patterns without copying their visual assets
+or source:
+
+- a branded header, short explanation and live readiness summary;
+- grouped Basic, Search, Language, Storage and Advanced sections;
+- validation beside the field that needs attention;
+- a primary **Install in Stremio** button and secondary **Copy manifest URL**;
+- a mobile-first responsive layout, keyboard navigation and accessible labels;
+- no EC password, amuleapi credential or token displayed unnecessarily.
+
+Stremio only redirects to `/configure` when the manifest is declared
+configurable. Its
+[manifest documentation](https://stremio.github.io/stremio-addon-sdk/api/responses/manifest.html)
+requires actual user configuration for that mode, and its
+[advanced guide](https://stremio.github.io/stremio-addon-sdk/advanced.html)
+expects the page to generate an installable manifest URL. aMulio must never
+reintroduce the configuration loop found during the E2E test.
+
+### Branding and language
+
+- Use the official aMule artwork from
+  [`src/icons/amule.png`](https://github.com/amule-project/amule/blob/master/src/icons/amule.png)
+  for the Stremio manifest and configuration UI.
+- Record its upstream provenance and GPL-2.0 asset licensing separately from
+  aMulio's Apache-2.0 code before shipping the copied asset.
+- Add `logo` and, if an appropriate original is available, `background` to the
+  manifest.
+- Make English the source language and default for the configuration page,
+  manifest, streams, status videos, errors and documentation examples.
+- Add Spanish as the first complete translation. All new UI strings must use
+  translation keys rather than inline prose.
+- Let the user select UI language independently from preferred search-result
+  languages.
+
+### “Download with aMule” semantics
+
+Stremio stream addons do not expose arbitrary action buttons in a stream row.
+The compatible interaction is to return a remote candidate as a stream and
+make selecting it call `/play/{token}`. aMulio already uses that hook to submit
+an eD2K link exactly once. The MVP must make the action explicit:
+
+1. A completed local result is labelled **Ready to play**.
+2. A remote result is labelled **Download with aMule** and includes size,
+   quality and source availability.
+3. Selecting it queues the link idempotently and plays a short English status
+   video confirming that the download started.
+4. Reopening the title shows current percentage, speed and sources.
+5. Once complete, the same result becomes **Ready to play** and serves HTTP
+   ranges.
+
+This is analogous to a debrid cache request at the UX level, but aMule may take
+materially longer and the interface must set that expectation honestly.
+
+### Home Assistant distribution
+
+Home Assistant now calls add-ons **apps**. Its
+[app tutorial](https://developers.home-assistant.io/docs/apps/tutorial/) and
+[configuration reference](https://developers.home-assistant.io/docs/apps/configuration/)
+support published multi-architecture container images, persistent `/data`,
+translated options, mapped media folders and declared TCP/UDP ports.
+
+The proposed aMulio Home Assistant app will:
+
+- ship `amuled`, `amuleapi` and aMulio in one image supervised as separate
+  processes; it will not require Docker API access or Docker Compose inside the
+  app;
+- support `amd64` and `aarch64`, publish versioned GHCR images and use the Home
+  Assistant builder/signing workflow;
+- keep configuration, Temp and Incoming data under persistent app storage,
+  optionally map `/media` or `/share`, and include backup/restore policy;
+- expose eD2K/Kad peer ports explicitly while keeping EC and amuleapi private;
+- use Home Assistant Ingress for the administrative/configuration UI.
+
+Ingress authentication is excellent for administration, according to the
+[Home Assistant presentation guide](https://developers.home-assistant.io/docs/apps/presentation/),
+but it is not a stable public Stremio transport: Stremio does not possess the
+Home Assistant browser session. The manifest, stream and playback routes
+therefore require a separate HTTPS origin.
+
+Supported remote-access paths will be:
+
+1. **Recommended:** Cloudflare Tunnel to aMulio's HTTPS origin, with the admin
+   UI protected separately and tokenised Stremio routes protected by aMulio.
+2. A user-managed reverse proxy with a valid certificate and one forwarded
+   HTTPS port.
+3. Local-network-only use for Stremio clients on the same network.
+
+Interactive Cloudflare Access cannot protect playback routes because Stremio
+cannot complete its login flow. Cloudflare
+[service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
+also require custom headers that Stremio addons cannot supply. Access may
+protect the admin hostname or `/configure`, while manifest/playback routes use
+high-entropy revocable aMulio capabilities, rate limits and HTTPS. The
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)
+connector avoids opening an inbound web port on the Home Assistant host.
+
+## Phase 6 — MVP configuration, branding and localisation
+
+### 6.1 Build the configuration model
+
+- [ ] Define versioned user settings for UI language, preferred result
+  languages, quality filters, result limit, maximum size and season packs.
+- [ ] Store profiles server-side under random, revocable configuration IDs;
+  never put aMule credentials in a manifest URL.
+- [ ] Separate read-only Stremio capabilities from an authenticated
+  administrator session; possession of a manifest URL must not grant profile
+  editing or access to daemon settings.
+- [ ] Add create, read, update, rotate and revoke operations with CSRF
+  protection and bounded validation.
+- [ ] Keep the current instance-level install token migration-compatible.
+
+### 6.2 Replace the prototype configuration page
+
+- [ ] Build a responsive, accessible dark UI with Basic, Search, Language,
+  Storage and Advanced sections.
+- [ ] Show live aMule EC, eD2K, Kad, Incoming storage and public-URL readiness.
+- [ ] Add **Install in Stremio** and **Copy manifest URL** actions with clear
+  success/error feedback.
+- [ ] Add UI tests for desktop/mobile layouts, keyboard operation, invalid
+  settings and install-link generation.
+
+### 6.3 Add official branding and i18n
+
+- [ ] Import the official aMule icon with provenance and per-asset licensing.
+- [ ] Serve versioned logo assets and include the logo in the Stremio manifest.
+- [ ] Extract every user-facing string into translation resources.
+- [ ] Complete English as the default and Spanish as a fully tested locale.
+- [ ] Localise status videos or replace embedded text with language-neutral
+  visuals plus translated stream descriptions.
+
+**Acceptance:** a new user can configure and install aMulio from a polished
+mobile or desktop page; Stremio shows the official aMule logo; a clean browser
+defaults entirely to English and switching to Spanish translates the complete
+flow.
+
+## Phase 7 — Validate “Download with aMule” end to end
+
+### 7.1 Make remote candidates understandable
+
+- [ ] Use distinct **Ready to play**, **Download with aMule** and
+  **Downloading** labels and icons.
+- [ ] Present quality, size, language and sources without implying that a
+  remote result is already cached.
+- [ ] Return a useful empty/error state when eD2K/Kad is disconnected or no
+  acceptable candidate exists.
+
+### 7.2 Exercise the real network journey
+
+- [ ] Publish or control a legal small eD2K fixture with known metadata.
+- [ ] From Stremio, select the remote fixture and prove one and only one
+  download is queued in aMule.
+- [ ] Verify status refreshes across queued, downloading, completing and ready
+  transitions.
+- [ ] Reopen and play the completed file with range requests and seeking.
+- [ ] Test cancellation, retry, unavailable sources, daemon restart and stale
+  search results.
+
+**Acceptance:** from a fresh aMule instance with an empty Incoming directory, a
+user can choose **Download with aMule** in Stremio, observe honest progress and
+play the completed legal fixture without touching aMule's UI.
+
+## Phase 8 — Home Assistant app and novice installation
+
+### 8.1 Package the app
+
+- [ ] Create a Home Assistant app repository with `config.yaml`, translated
+  options, documentation, changelog, icon/logo and AppArmor profile.
+- [ ] Supervise `amuled`, `amuleapi` and aMulio in one least-privileged image.
+- [ ] Publish signed `amd64` and `aarch64` images and test fresh install,
+  upgrade, rollback and backup restore on Home Assistant OS.
+- [ ] Provide conservative storage limits and explain the impact of aMule
+  downloads on small Home Assistant devices.
+
+### 8.2 Make remote access guided and safe
+
+- [ ] Provide an Ingress administration UI that generates secrets and reports
+  readiness without revealing credentials.
+- [ ] Offer an optional Cloudflare Tunnel setup wizard using a user-supplied
+  tunnel token; never request a broad Cloudflare API key.
+- [ ] Document split protection: Access/HA authentication for administration,
+  revocable aMulio bearer capabilities for Stremio routes.
+- [ ] Provide an advanced reverse-proxy/port-forwarding guide with TLS, DNS,
+  firewall and rotation checks.
+- [ ] Add a one-screen copy/install handoff from Home Assistant to Stremio.
+
+**Acceptance:** a Home Assistant OS user can add the repository, install the
+app, configure storage, obtain a public HTTPS manifest and play the legal E2E
+fixture without SSH, Docker Compose or editing configuration files.
+
+## Phase 9 — Optional progressive `.part` playback experiment
 
 Only start after v1 is stable and after an explicit decision to support it.
 
@@ -186,8 +395,12 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Phase 5 is complete. The next unstarted work is **Phase 6: optional progressive
-playback**, which requires an explicit product decision before implementation.
+The public completed-file E2E is complete. The next work is **Phase 6.1:
+versioned configuration profiles**, followed by the configuration UI, official
+branding and English-first localisation. Phase 7 must then validate the real
+click-to-download journey. Home Assistant packaging follows in Phase 8.
+Progressive `.part` playback is deliberately deferred to Phase 9.
+
 CI enforces linting, tests, dependency audits, CodeQL and a coverage floor.
 
 Before changing behavior, run:
