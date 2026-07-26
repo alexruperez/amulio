@@ -678,6 +678,8 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         f"{settings.install_token.get_secret_value()}/configure/status"
     )
     logo_url = html.escape(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
+    profile_management_enabled = settings.admin_password is not None
+    profile_disabled = " disabled" if not profile_management_enabled else ""
 
     def t(key: str) -> str:
         return html.escape(translate(locale, key))
@@ -806,10 +808,11 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           <summary>{t("profile_settings")}</summary>
           <form class="profile-content" id="profile-form">
             <p>{t("profile_intro")}</p>
+            {f'<p class="profile-feedback" data-kind="error">{t("profile_management_disabled")}</p>' if not profile_management_enabled else ""}
             <label for="admin-password">{t("admin_password")}
-              <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+              <input id="admin-password" name="password" type="password" autocomplete="current-password" required{profile_disabled}>
             </label>
-            <fieldset class="profile-group">
+            <fieldset class="profile-group"{profile_disabled}>
               <legend>{t("profile_basic")}</legend>
               <label for="profile-language">{t("profile_language")}
                 <select id="profile-language" name="ui_language">
@@ -819,7 +822,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
               </label>
               <p class="field-hint">{t("storage_note")}</p>
             </fieldset>
-            <fieldset class="profile-group">
+            <fieldset class="profile-group"{profile_disabled}>
               <legend>{t("profile_search")}</legend>
               <label for="search-languages">{t("search_languages")}
                 <input id="search-languages" name="search_languages" value="en,es" pattern="[A-Za-z0-9,-\\s]+" required>
@@ -827,7 +830,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
               </label>
               <label class="checkbox-label"><input name="allow_season_packs" type="checkbox">{t("season_packs")}</label>
             </fieldset>
-            <fieldset class="profile-group">
+            <fieldset class="profile-group"{profile_disabled}>
               <legend>{t("profile_advanced")}</legend>
               <div class="profile-grid">
               <label for="result-limit">{t("result_limit")}
@@ -838,7 +841,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
               </label>
               </div>
             </fieldset>
-            <button class="button" type="submit" id="profile-submit">{t("create_profile")}</button>
+            <button class="button" type="submit" id="profile-submit"{profile_disabled}>{t("create_profile")}</button>
             <div class="profile-feedback" id="profile-feedback" role="status"></div>
           </form>
         </details>

@@ -61,6 +61,10 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_unavailable_detail": "Check the aMule connection and try again.",
         "profile_settings": "Profile settings",
         "profile_intro": "Create a private manifest with your own discovery preferences.",
+        "profile_management_disabled": (
+            "Profile management is disabled. Ask this instance's administrator to set "
+            "AMULIO_ADMIN_PASSWORD before creating a profile."
+        ),
         "profile_basic": "Basic",
         "profile_search": "Search",
         "profile_advanced": "Advanced",
@@ -144,6 +148,10 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "stream_unavailable_detail": "Comprueba la conexión de aMule y vuelve a intentarlo.",
         "profile_settings": "Ajustes del perfil",
         "profile_intro": "Crea un manifest privado con tus preferencias de búsqueda.",
+        "profile_management_disabled": (
+            "La gestión de perfiles está desactivada. Pide al administrador de esta "
+            "instancia que configure AMULIO_ADMIN_PASSWORD antes de crear un perfil."
+        ),
         "profile_basic": "Básico",
         "profile_search": "Búsqueda",
         "profile_advanced": "Avanzado",

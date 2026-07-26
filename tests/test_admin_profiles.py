@@ -64,3 +64,19 @@ def test_admin_api_is_not_exposed_until_an_admin_password_is_configured(monkeypa
 
     assert response.status_code == 404
     get_settings.cache_clear()
+
+
+def test_admin_password_can_be_loaded_from_a_private_file(monkeypatch, tmp_path):
+    password_file = tmp_path / "amulio_admin_password"
+    password_file.write_text("a" * 32)
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULIO_ADMIN_PASSWORD_FILE", str(password_file))
+    monkeypatch.delenv("AMULIO_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        assert client.post("/admin/session", json={"password": "a" * 32}).status_code == 200
+
+    get_settings.cache_clear()

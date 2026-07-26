@@ -12,7 +12,7 @@ normal update: it deletes persistent state.
 | `amulio_amule_config` | Yes | aMule identity and configuration. |
 | `amulio_amulio_data` | Yes | aMulio SQLite candidate and download-state cache. |
 | `amulio_caddy_data`, `amulio_caddy_config` | Yes, encrypted | TLS certificates and Caddy state. |
-| `secrets/amule_ec_password`, `secrets/amuleapi_admin_password`, `.env` | Yes, encrypted and outside Git | Credentials and installation/signing tokens. |
+| `secrets/amule_ec_password`, `secrets/amuleapi_admin_password`, optional `secrets/amulio_admin_password`, `.env` | Yes, encrypted and outside Git | Credentials and installation/signing tokens. |
 | `amulio_temp` | No | Incomplete, transient aMule parts. |
 | `amulio_incoming` | Optional, separate media backup | Completed media can be large and may have its own retention policy. |
 

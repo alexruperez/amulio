@@ -68,6 +68,22 @@ def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
     monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
     get_settings.cache_clear()
 
+
+def test_configuration_explains_when_profile_management_is_disabled(monkeypatch):
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    monkeypatch.delenv("AMULIO_ADMIN_PASSWORD", raising=False)
+    monkeypatch.delenv("AMULIO_ADMIN_PASSWORD_FILE", raising=False)
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        configured = client.get("/configure")
+
+    assert "Profile management is disabled." in configured.text
+    assert 'id="profile-submit" disabled' in configured.text
+    get_settings.cache_clear()
+
     with TestClient(app) as client:
         configured = client.get("/configure?lang=es")
 

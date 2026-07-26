@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     admin_password: SecretStr | None = Field(
         default=None, min_length=16, validation_alias="AMULIO_ADMIN_PASSWORD"
     )
+    admin_password_file: str | None = Field(
+        default=None, validation_alias="AMULIO_ADMIN_PASSWORD_FILE"
+    )
     admin_session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
     metrics_token: SecretStr | None = Field(default=None, min_length=24)
     allowed_media_roots: str = "/data/incoming"
@@ -53,19 +56,34 @@ class Settings(BaseSettings):
     playback_rate_limit: int = Field(default=600, ge=1, le=100_000)
 
     @model_validator(mode="after")
-    def load_amule_api_admin_password_file(self) -> "Settings":
-        if self.amule_api_admin_password is not None:
-            return self
-        if not self.amule_api_admin_password_file:
-            raise ValueError("Set AMULE_API_ADMIN_PASSWORD or AMULE_API_ADMIN_PASSWORD_FILE")
-        try:
-            password = Path(self.amule_api_admin_password_file).read_text().strip()
-        except OSError as exc:
-            raise ValueError("Could not read AMULE_API_ADMIN_PASSWORD_FILE") from exc
-        if not password:
-            raise ValueError("AMULE_API_ADMIN_PASSWORD_FILE must not be empty")
-        self.amule_api_admin_password = SecretStr(password)
+    def load_password_files(self) -> "Settings":
+        if self.admin_password is None and self.admin_password_file:
+            admin_password = self._read_secret_file(
+                self.admin_password_file, variable="AMULIO_ADMIN_PASSWORD_FILE"
+            )
+            if len(admin_password) < 16:
+                raise ValueError("AMULIO_ADMIN_PASSWORD_FILE must contain at least 16 characters")
+            self.admin_password = SecretStr(admin_password)
+        if self.amule_api_admin_password is None:
+            if not self.amule_api_admin_password_file:
+                raise ValueError("Set AMULE_API_ADMIN_PASSWORD or AMULE_API_ADMIN_PASSWORD_FILE")
+            self.amule_api_admin_password = SecretStr(
+                self._read_secret_file(
+                    self.amule_api_admin_password_file,
+                    variable="AMULE_API_ADMIN_PASSWORD_FILE",
+                )
+            )
         return self
+
+    @staticmethod
+    def _read_secret_file(path: str, *, variable: str) -> str:
+        try:
+            password = Path(path).read_text().strip()
+        except OSError as exc:
+            raise ValueError(f"Could not read {variable}") from exc
+        if not password:
+            raise ValueError(f"{variable} must not be empty")
+        return password
 
     @property
     def media_roots(self) -> tuple[str, ...]:

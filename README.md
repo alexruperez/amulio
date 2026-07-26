@@ -138,9 +138,10 @@ Stremio.
 The Stremio manifest URL is deliberately a read-only capability: it cannot
 change aMulio preferences or access aMule credentials. To enable the separate
 administrator API, set a high-entropy `AMULIO_ADMIN_PASSWORD` in your private
-environment. It creates short-lived `HttpOnly`, `SameSite=Strict` sessions and
-requires a CSRF token for every profile mutation. Do not reuse the manifest
-token or the aMule EC password for this value.
+environment, or mount it from `AMULIO_ADMIN_PASSWORD_FILE` in production. It
+creates short-lived `HttpOnly`, `SameSite=Strict` sessions and requires a CSRF
+token for every profile mutation. Do not reuse the manifest token or the aMule
+EC password for this value.
 
 Each profile has a separate, revocable Stremio manifest URL. Its preferences
 apply to discovery and ranking without exposing aMule credentials. The original
