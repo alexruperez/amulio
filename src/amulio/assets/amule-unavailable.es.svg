@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#5b2530"/>
+  <circle cx="640" cy="245" r="72" fill="#f08a99"/>
+  <path d="M640 202v55m0 35v1" stroke="#5b2530" stroke-width="18" stroke-linecap="round" fill="none"/>
+  <text x="640" y="405" text-anchor="middle" fill="white" font-family="Verdana, sans-serif" font-size="54" font-weight="bold">aMulio</text>
+  <text x="640" y="475" text-anchor="middle" fill="#f6d8dd" font-family="Verdana, sans-serif" font-size="34">aMule no está disponible</text>
+  <text x="640" y="535" text-anchor="middle" fill="#e7bcc5" font-family="Verdana, sans-serif" font-size="25">Comprueba el servidor y vuelve a intentarlo.</text>
+</svg>

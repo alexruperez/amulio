@@ -316,7 +316,7 @@ connector avoids opening an inbound web port on the Home Assistant host.
 - [ ] Serve versioned logo assets and include the logo in the Stremio manifest.
 - [ ] Extract every user-facing string into translation resources.
 - [ ] Complete English as the default and Spanish as a fully tested locale.
-- [ ] Localise status videos or replace embedded text with language-neutral
+- [x] Localise status videos or replace embedded text with language-neutral
   visuals plus translated stream descriptions.
 
 **Acceptance:** a new user can configure and install aMulio from a polished

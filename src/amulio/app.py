@@ -259,7 +259,7 @@ def _stream_object(
 ) -> dict:
     settings = _settings(request)
     token = sign(
-        {"candidate": candidate.model_dump()},
+        {"candidate": candidate.model_dump(), "locale": locale},
         secret=settings.token_secret.get_secret_value(),
         ttl_seconds=settings.candidate_ttl_seconds,
     )
@@ -1126,11 +1126,13 @@ async def play(token: str, request: Request, api: ApiClient, cache: Cache):
         settings=settings,
     )
     try:
-        candidate = Candidate.model_validate(
-            verify(token, secret=settings.token_secret.get_secret_value())["candidate"]
-        )
+        payload = verify(token, secret=settings.token_secret.get_secret_value())
+        candidate = Candidate.model_validate(payload["candidate"])
     except (InvalidToken, KeyError):
         raise HTTPException(status_code=404) from None
+    locale = resolve_locale(
+        payload.get("locale") if isinstance(payload.get("locale"), str) else None
+    )
 
     if candidate.local_path is not None:
         _safe_media_path(candidate.local_path, settings=settings)
@@ -1146,13 +1148,14 @@ async def play(token: str, request: Request, api: ApiClient, cache: Cache):
                 cache.set_file_state(candidate.hash, "downloading", status="queued")
     except AmuleApiError as exc:
         logger.warning("aMule is unavailable while playing %s: %s", candidate.hash, exc)
-        return status_video("unavailable")
+        return status_video("unavailable", locale=locale)
 
     if queued:
-        return status_video("started")
+        return status_video("started", locale=locale)
     file_state = cache.file_state(candidate.hash)
     return status_video(
-        "downloading" if file_state and file_state.state == "downloading" else "started"
+        "downloading" if file_state and file_state.state == "downloading" else "started",
+        locale=locale,
     )
 
 

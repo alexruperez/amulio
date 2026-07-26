@@ -4,6 +4,7 @@ from amulio.app import _stream_object, app
 from amulio.config import Settings
 from amulio.local_media import discover_local_media
 from amulio.metadata import MediaMetadata
+from amulio.tokens import verify
 
 
 def test_completed_local_video_is_discovered_even_when_small(tmp_path: Path):
@@ -42,3 +43,21 @@ def test_completed_local_video_is_web_ready(tmp_path: Path):
     assert stream["name"] == "✅ aMulio · Ready to play · 720p"
     assert stream["description"].startswith("Completed local file")
     assert "💾 1.5 MB" in stream["description"]
+
+
+def test_stream_playback_token_carries_the_selected_locale(tmp_path: Path):
+    video = tmp_path / "Avatar.2009.720p.H264.mp4"
+    video.write_bytes(b"x" * 1_500_000)
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        allowed_media_roots=str(tmp_path),
+        AMULE_API_ADMIN_PASSWORD="test-password",
+    )
+    app.state.settings = settings
+    candidate = discover_local_media(MediaMetadata(title="Avatar", year=2009), settings)[0]
+
+    stream = _stream_object(candidate, type("Request", (), {"app": app})(), locale="es")
+    token = stream["url"].rsplit("/", maxsplit=1)[1]
+
+    assert verify(token, secret=settings.token_secret.get_secret_value())["locale"] == "es"
