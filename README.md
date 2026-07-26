@@ -120,6 +120,10 @@ deferred until those product and distribution milestones are complete.
 aMulio serves the completed file bytes itself, which is why its filesystem mount
 is read-only and tightly restricted.
 
+eD2K search is asynchronous. aMulio waits eight seconds by default before
+collecting results; self-hosters may tune `AMULIO_SEARCH_WAIT_SECONDS` between
+zero and ten seconds when their server responds more quickly or slowly.
+
 ## Quick start for development
 
 ```sh

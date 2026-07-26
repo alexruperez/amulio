@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     denied_file_extensions: str = ".exe,.iso,.rar,.zip"
     allow_season_packs: bool = False
     search_query_limit: int = Field(default=3, ge=1, le=5)
-    search_wait_seconds: float = Field(default=1.0, ge=0, le=10)
+    # eD2K global searches commonly need several seconds before the first
+    # server replies. Prefer a useful listing over a fast, empty response.
+    search_wait_seconds: float = Field(default=8.0, ge=0, le=10)
     search_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     candidate_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     negative_candidate_ttl_seconds: int = Field(default=120, ge=10, le=3600)
