@@ -14,6 +14,7 @@ from amulio.events import monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.ranking import rank_results
+from amulio.search_locks import MediaSearchLocks
 from amulio.tokens import InvalidToken, sign, verify
 
 
@@ -38,6 +39,13 @@ def _get_cache(request: Request) -> CandidateCache:
 Cache = Annotated[CandidateCache, Depends(_get_cache)]
 
 
+def _get_search_locks(request: Request) -> MediaSearchLocks:
+    return request.app.state.search_locks
+
+
+SearchLocks = Annotated[MediaSearchLocks, Depends(_get_search_locks)]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -48,6 +56,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.metadata = CinemetaClient(base_url=str(settings.cinemeta_base_url))
     app.state.cache = CandidateCache(settings.database_path)
+    app.state.search_locks = MediaSearchLocks()
     app.state.event_monitor = asyncio.create_task(
         monitor_events(app.state.amule_api, app.state.cache),
         name="amulio-amuleapi-events",
@@ -138,6 +147,54 @@ async def _resolve_completed_file(candidate: Candidate, api: AmuleApiClient):
     return await api.completed_download(candidate.hash)
 
 
+async def _discover_candidates(
+    *,
+    media_type: str,
+    media_id: str,
+    api: AmuleApiClient,
+    metadata: CinemetaClient,
+    cache: CandidateCache,
+    settings: Settings,
+    search_locks: MediaSearchLocks,
+) -> list[Candidate]:
+    # Stremio uses tt<id>:<season>:<episode> for episodes, making this key
+    # independently serialise every movie and episode lookup.
+    media_key = f"{media_type}:{media_id}"
+    cached = cache.get(media_key)
+    if cached is not None:
+        return cached
+
+    async with search_locks.acquire(media_key):
+        # A request that waited for an identical search should reuse its result.
+        cached = cache.get(media_key)
+        if cached is not None:
+            return cached
+
+        resolved = await metadata.resolve(media_type, media_id)
+        search_ids = await asyncio.gather(
+            api.start_search(resolved.search_query, kind="global"),
+            api.start_search(resolved.search_query, kind="kad"),
+        )
+        await asyncio.sleep(settings.search_wait_seconds)
+        result_sets = await asyncio.gather(
+            *(api.search_results(search_id) for search_id in search_ids)
+        )
+        candidates = rank_results(
+            [result for result_set in result_sets for result in result_set],
+            resolved,
+        )
+        cache.put(
+            media_key,
+            candidates,
+            ttl_seconds=(
+                settings.candidate_ttl_seconds
+                if candidates
+                else settings.negative_candidate_ttl_seconds
+            ),
+        )
+        return candidates
+
+
 @app.get("/health")
 async def health(api: ApiClient):
     try:
@@ -188,6 +245,7 @@ async def streams(
     api: ApiClient,
     metadata: MetadataClient,
     cache: Cache,
+    search_locks: SearchLocks,
 ):
     settings = _settings(request)
     _require_install_token(installation_token, settings)
@@ -196,27 +254,18 @@ async def streams(
         return {"streams": []}
 
     try:
-        resolved = await metadata.resolve(media_type, media_id)
-        media_key = f"{media_type}:{media_id}"
-        candidates = cache.get(media_key)
-        if candidates is not None:
-            return _stream_response(candidates, request, cache)
-        search_ids = await asyncio.gather(
-            api.start_search(resolved.search_query, kind="global"),
-            api.start_search(resolved.search_query, kind="kad"),
-        )
-        await asyncio.sleep(settings.search_wait_seconds)
-        result_sets = await asyncio.gather(
-            *(api.search_results(search_id) for search_id in search_ids)
+        candidates = await _discover_candidates(
+            media_type=media_type,
+            media_id=media_id,
+            api=api,
+            metadata=metadata,
+            cache=cache,
+            settings=settings,
+            search_locks=search_locks,
         )
     except (AmuleApiError, MetadataError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    candidates = rank_results(
-        [result for result_set in result_sets for result in result_set],
-        resolved,
-    )
-    cache.put(media_key, candidates, ttl_seconds=settings.candidate_ttl_seconds)
     return _stream_response(candidates, request, cache)
 
 

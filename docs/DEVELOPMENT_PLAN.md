@@ -45,11 +45,11 @@ do not start the next one until the previous gate is satisfied.
 
 ### 1.1 Add per-media search locks
 
-- [ ] Use a keyed in-process lock for `movie:<imdb-id>` and
+- [x] Use a keyed in-process lock for `movie:<imdb-id>` and
   `series:<imdb-id>:<season>:<episode>`.
-- [ ] Return cached candidates immediately when a matching search is already
+- [x] Return cached candidates immediately when a matching search is already
   running instead of launching duplicate global/Kad searches.
-- [ ] Record a short negative-cache entry when no acceptable results are found.
+- [x] Record a short negative-cache entry when no acceptable results are found.
 
 **Acceptance:** ten concurrent requests for the same Stremio stream URL create
 at most one global search and one Kad search in aMule.
@@ -184,9 +184,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Start with **Phase 1.1: per-media search locks**. It removes duplicate network
-load and establishes the concurrency primitive that later cache and SSE work
-will share.
+Continue with **Phase 1.2: metadata and query generation**. The completed
+per-media locks remove duplicate network load and provide the concurrency
+primitive that later cache and SSE work will share.
 
 Before changing behavior, run:
 

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     cinemeta_base_url: AnyHttpUrl = "https://v3-cinemeta.strem.io/"
     search_wait_seconds: float = Field(default=1.0, ge=0, le=10)
     candidate_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    negative_candidate_ttl_seconds: int = Field(default=120, ge=10, le=3600)
 
     @property
     def media_roots(self) -> tuple[str, ...]:
