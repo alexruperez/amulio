@@ -13,7 +13,7 @@ services:
     networks: [frontend, backend]
 
   # amuleapi must be built from aMule master with BUILD_AMULEAPI=ON until 3.1.0 ships.
-  # It intentionally has no published port; Amulio is its only HTTP client.
+  # It intentionally has no published port; aMulio is its only HTTP client.
   amuleapi:
     image: ${AMULE_API_IMAGE:-ghcr.io/replace-me/amuleapi:master}
     profiles: [amule]

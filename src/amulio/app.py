@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     app.state.cache.close()
 
 
-app = FastAPI(title="Amulio", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="aMulio", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     # The installation URL is a high-entropy bearer capability and no cookies are used.
@@ -94,7 +94,7 @@ def _stream_object(candidate: Candidate, request: Request, *, state: str | None 
         ttl_seconds=settings.candidate_ttl_seconds,
     )
     return {
-        "name": f"{_state_marker(state)} Amulio · {candidate.quality or 'video'}",
+        "name": f"{_state_marker(state)} aMulio · {candidate.quality or 'video'}",
         "description": (
             f"{candidate.name}\n"
             f"💾 {candidate.size / 1_000_000_000:.2f} GB · "
@@ -158,7 +158,7 @@ async def configure(request: Request):
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/manifest.json"
     )
-    return f"""<!doctype html><html><body><h1>Amulio</h1>
+    return f"""<!doctype html><html><body><h1>aMulio</h1>
     <p>Instala este addon privado en Stremio:</p><code>{manifest_url}</code></body></html>"""
 
 
@@ -169,7 +169,7 @@ async def manifest(installation_token: str, request: Request):
     return {
         "id": "com.alexruperez.amulio",
         "version": "0.1.0",
-        "name": "Amulio",
+        "name": "aMulio",
         "description": "Busca contenido eD2K/Kad y reproduce archivos completados de aMule.",
         "catalogs": [],
         "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],

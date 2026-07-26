@@ -1,1 +1,1 @@
-"""Amulio: a self-hosted Stremio addon backed by aMule."""
+"""aMulio: a self-hosted Stremio addon backed by aMule."""
