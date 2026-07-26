@@ -75,22 +75,28 @@ flowchart LR
 aMulio is under active development. The current vertical slice already
 contains:
 
-- Private configurable Stremio manifest.
+- Private installation URLs and revocable, preference-specific manifests.
+- A responsive English/Spanish configuration UI with live instance readiness.
 - IMDb/Cinemeta title resolution for movies and series episodes.
 - Parallel eD2K global and Kad searches through authenticated `amuleapi`.
 - SQLite result caching and conservative filename/episode/quality ranking.
 - Live download and shared-file state updates from `amuleapi` Server-Sent Events.
 - Signed stream URLs that do not expose aMule credentials.
 - Enqueueing selected eD2K links in aMule.
+- Localised download, progress, unavailable and empty-result status videos.
 - Safe playback of completed files from approved Incoming roots.
 - HTTP `Range`/seek support via Starlette's `FileResponse`.
+- A reproducible Docker Compose stack with a pinned aMule development build,
+  private control ports and Caddy HTTPS.
 
-### Next milestones
+### Current development focus
 
-- A Stremio-friendly “download started / still downloading” status video.
-- Better aliases, languages, release parsing and ranking rules.
-- Docker image for a pinned aMule development build with `amuleapi` enabled.
-- Experimental progressive playback for `.part` files, behind a feature flag.
+- Complete the controlled legal eD2K end-to-end test from a seed on a second
+  public IP. Live discovery, queueing, progress and cancellation are already
+  validated; completion and playback of that fixture remain pending.
+- Package aMulio and aMule as a novice-friendly Home Assistant app.
+- Consider experimental progressive playback for `.part` files only after v1
+  is stable.
 
 Progressive playback is deliberately **not** part of v1. `amuleapi` currently
 exposes per-part availability, but not a precise byte-range map or an API to
@@ -100,11 +106,11 @@ reliable first milestone.
 The step-by-step implementation roadmap and acceptance gates live in
 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md).
 
-The next MVP milestones prioritise a polished Torrentio/Comet-style
-configuration experience, official aMule branding, English-first localisation,
-an end-to-end **Download with aMule** flow and a novice-friendly Home Assistant
-app. Progressive playback of incomplete `.part` files is intentionally
-deferred until those product and distribution milestones are complete.
+The polished Torrentio/Comet-style configuration experience, official aMule
+branding and English/Spanish localisation are complete. The remaining MVP
+acceptance gate is the controlled legal **Download with aMule** journey;
+Home Assistant packaging follows it. Progressive playback of incomplete
+`.part` files remains deferred.
 
 ## Requirements
 
@@ -237,4 +243,6 @@ workflow, and [SECURITY.md](SECURITY.md) for responsible vulnerability reports.
 
 ## License
 
-aMulio is released under the [Apache License 2.0](LICENSE).
+The aMulio source code is released under the [Apache License 2.0](LICENSE).
+The bundled aMule logo retains its upstream GPL-2.0-or-later terms; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

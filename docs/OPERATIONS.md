@@ -28,6 +28,7 @@ of date, which is safe because aMulio rebuilds it from amuleapi.
 
 ```sh
 export BACKUP_DIR=/srv/backups/amulio/$(date +%F)
+umask 077
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
@@ -40,8 +41,15 @@ for volume in amulio_amule_config amulio_amulio_data amulio_caddy_data amulio_ca
     tar -C /source -cpf "/backup/${volume}.tar" .
 done
 
-cp .env secrets/amule_ec_password secrets/amuleapi_admin_password "$BACKUP_DIR"/
-chmod 600 "$BACKUP_DIR"/*
+install -m 600 .env "$BACKUP_DIR/.env"
+install -m 600 secrets/amule_ec_password "$BACKUP_DIR/amule_ec_password"
+install -m 600 secrets/amuleapi_admin_password \
+  "$BACKUP_DIR/amuleapi_admin_password"
+if test -f secrets/amulio_admin_password; then
+  install -m 600 secrets/amulio_admin_password \
+    "$BACKUP_DIR/amulio_admin_password"
+fi
+chmod 600 "$BACKUP_DIR"/*.tar
 ```
 
 Store the directory with an encrypted backup system. Caddy's data contains TLS
@@ -87,6 +95,10 @@ install -m 600 "$BACKUP_DIR/.env" .env
 install -d -m 700 secrets
 install -m 600 "$BACKUP_DIR/amule_ec_password" secrets/amule_ec_password
 install -m 600 "$BACKUP_DIR/amuleapi_admin_password" secrets/amuleapi_admin_password
+if test -f "$BACKUP_DIR/amulio_admin_password"; then
+  install -m 600 "$BACKUP_DIR/amulio_admin_password" \
+    secrets/amulio_admin_password
+fi
 docker compose up --build -d
 docker compose ps
 ```

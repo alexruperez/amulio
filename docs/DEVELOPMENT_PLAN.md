@@ -34,11 +34,11 @@ later, opt-in experiment.
 | Completed local-file discovery | Done and validated | Incoming files are matched to Cinemeta titles and shown as web-ready streams. |
 | Download/shared SSE subscription | Done | Snapshot-then-stream reconciliation, `resync` recovery and monitor health are persisted. |
 | Downloading-state player UX | Done | Bundled status videos, live stream metadata and idempotent enqueueing. |
-| Reproducible aMule 3.1 image | Done | Multi-stage local build pins the upstream aMule and wxWidgets commits. |
+| Reproducible pinned aMule image | Done | Multi-stage build pins a post-3.0.1 development commit containing `amuleapi`; it is not labelled as an unreleased 3.1. |
 | Production Caddy deployment | Done for test instance | Caddy exposes HTTPS while EC and amuleapi remain private. |
-| Configuration experience | In progress | Branded responsive install page, live readiness and revocable profiles; grouped UX and feedback tests remain. |
-| Branding and localisation | In progress | Official versioned logo, English default, Spanish flow and localised status videos ship; remaining strings and coverage are tracked in Phase 6. |
-| Click-to-download E2E | Implemented in code, not product-validated | Selecting a remote candidate queues it idempotently; the complete real-network journey still needs validation. |
+| Configuration experience | Done | Branded responsive install page, live readiness, revocable profiles and UI feedback tests. |
+| Branding and localisation | Done | Official versioned logo, English default, Spanish flow and localised status videos. |
+| Click-to-download E2E | In progress | Live discovery, queueing, progress and cancellation are validated; controlled legal completion and playback still require a seed on another public IP. |
 | Home Assistant app | Research complete; not started | Feasible as a single supervised image for `amuled`, `amuleapi` and aMulio. |
 
 ## Development order
@@ -67,7 +67,7 @@ at most one global search and one Kad search in aMule.
   and exact `SxxEyy` variants for episodes.
 - [x] Enforce a bounded timeout for each discovery cycle.
 - [x] Close stale aMule search sessions with `POST /search/stop` and
-  `close: true`, validated against the upstream aMule 3.1 `amuleapi` source.
+  `close: true`, validated against the pinned upstream `amuleapi` source.
 
 **Acceptance:** test fixtures cover films with translated titles and series
 episodes whose filename uses `S02E04`, `2x04` or equivalent notation.
@@ -178,7 +178,9 @@ backup and incident diagnosis without requiring source-code knowledge.
 
 The July 2026 public E2E test proved that Stremio can discover and play a
 completed file through aMulio. It also exposed the following MVP gaps, which
-take priority over incomplete `.part` playback.
+took priority over incomplete `.part` playback. Phase 6 implements the
+configuration, branding and localisation decisions below; the Home Assistant
+work remains planned for Phase 8.
 
 ### Configuration UX
 
@@ -189,11 +191,12 @@ configuration page with grouped controls, useful defaults, an explicit
 secondary options in progressive sections so the initial experience stays
 approachable.
 
-aMulio will adopt those product patterns without copying their visual assets
-or source:
+aMulio adopts those product patterns without copying their visual assets or
+source:
 
 - a branded header, short explanation and live readiness summary;
-- grouped Basic, Search, Language, Storage and Advanced sections;
+- grouped Basic, Search and Advanced controls, plus explicit language and
+  storage-boundary guidance;
 - validation beside the field that needs attention;
 - a primary **Install in Stremio** button and secondary **Copy manifest URL**;
 - a mobile-first responsive layout, keyboard navigation and accessible labels;
@@ -210,10 +213,10 @@ reintroduce the configuration loop found during the E2E test.
 ### Branding and language
 
 - Use the official aMule artwork from
-  [`src/icons/amule.png`](https://github.com/amule-project/amule/blob/master/src/icons/amule.png)
+  [`org.amule.aMule.png`](https://github.com/amule-org/amule/blob/master/org.amule.aMule.png)
   for the Stremio manifest and configuration UI.
-- Record its upstream provenance and GPL-2.0 asset licensing separately from
-  aMulio's Apache-2.0 code before shipping the copied asset.
+- Record its upstream provenance and GPL-2.0-or-later asset licensing
+  separately from aMulio's Apache-2.0 code before shipping the copied asset.
 - Add `logo` and, if an appropriate original is available, `background` to the
   manifest.
 - Make English the source language and default for the configuration page,
@@ -227,8 +230,8 @@ reintroduce the configuration loop found during the E2E test.
 
 Stremio stream addons do not expose arbitrary action buttons in a stream row.
 The compatible interaction is to return a remote candidate as a stream and
-make selecting it call `/play/{token}`. aMulio already uses that hook to submit
-an eD2K link exactly once. The MVP must make the action explicit:
+make selecting it call `/play/{token}`. aMulio uses that hook to submit an
+eD2K link exactly once and makes the action explicit:
 
 1. A completed local result is labelled **Ready to play**.
 2. A remote result is labelled **Download with aMule** and includes size,
@@ -302,8 +305,8 @@ connector avoids opening an inbound web port on the Home Assistant host.
 
 ### 6.2 Replace the prototype configuration page
 
-- [x] Build a responsive, accessible dark UI with Basic, Search, Language,
-  Storage and Advanced sections.
+- [x] Build a responsive, accessible dark UI with grouped Basic, Search and
+  Advanced controls plus language selection and storage-boundary guidance.
 - [x] Show live aMule EC, eD2K, Kad, Incoming storage and public-URL readiness.
 - [x] Add **Install in Stremio** and **Copy manifest URL** actions with clear
   success/error feedback.
@@ -339,8 +342,10 @@ flow.
 
 - **Status: in progress (2026-07-27).** A live remote-network check has
   validated discovery, selection, queueing and honest in-progress reporting in
-  Stremio. The remaining acceptance run must use the controlled legal fixture
-  from a different public IP, so its download can be independently sourced.
+  Stremio; cancellation of the test download was validated through the aMule
+  control plane. The remaining acceptance run must use the controlled legal
+  fixture from a different public IP, so its download can be independently
+  sourced.
 - [x] Validate live remote eD2K discovery, selection, queueing and progress
   reporting in Stremio.
 - [ ] Publish or control a legal small eD2K fixture with known metadata. See
@@ -404,12 +409,11 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-The public completed-file E2E is complete and Phase 6.1 is delivered. Continue
-with **Phase 6.2**, finishing grouped configuration controls, install/copy
-feedback and UI coverage; then complete the remaining Phase 6.3 localisation
-work. Phase 7 must validate the real click-to-download journey. Home Assistant
-packaging follows in Phase 8. Progressive `.part` playback is deliberately
-deferred to Phase 9.
+Continue **Phase 7.2** with the controlled legal Big Buck Bunny fixture. The
+download seed must run from a public IP different from the aMulio downloader;
+then validate exactly-once queueing, progress through completion, ready-state
+playback and retry/restart behavior. Phase 8 Home Assistant packaging follows.
+Progressive `.part` playback remains deferred to Phase 9.
 
 CI enforces linting, tests, dependency audits, CodeQL and a coverage floor.
 

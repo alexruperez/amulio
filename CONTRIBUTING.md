@@ -39,9 +39,10 @@ nor a running aMule instance.
 - Update README, operations, configuration or plan documentation whenever a
   user-facing behavior changes.
 
-CI runs linting, Playwright UI tests, coverage, Compose validation, Docker builds, dependency
-auditing and CodeQL. Dependabot maintains GitHub Actions, Python and Docker
-dependencies; please review its pull requests like any other change.
+CI runs linting, Playwright UI tests, coverage, Compose validation, Docker
+builds, dependency auditing and CodeQL. Dependabot maintains GitHub Actions,
+Python and Docker dependencies; please review its pull requests like any other
+change.
 
 ## Reporting problems
 

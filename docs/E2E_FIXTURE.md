@@ -6,6 +6,14 @@ ordinary aMulio instance is the downloader, while a second, isolated aMule
 instance is the seed. Never use this process with media you are not allowed to
 redistribute.
 
+## Current validation status
+
+Live eD2K discovery, selection, queueing and progress reporting have been
+validated from Stremio, and cancellation of the test download has been
+validated through the aMule control plane. The controlled legal fixture is
+prepared, but its completion and playback acceptance remain pending because
+the seed must use a public IP different from the downloader.
+
 ## Fixture
 
 The supported fixture is **Big Buck Bunny** (`tt1254207`, 2008). Wikimedia
@@ -60,8 +68,13 @@ afterwards.
 
 ## Stremio journey
 
-1. Ensure both eD2K and Kad show **Connected** in aMulio.
-2. In Stremio search for **Big Buck Bunny** and open the 2008 movie.
+1. Ensure `amuleapi` and eD2K show **Connected** in aMulio. Kad is desirable
+   but is not a prerequisite when the fixture's eD2K source is already known.
+2. In Stremio search for **Big Buck Bunny** and open the 2008 movie. If the
+   active Stremio catalogue does not expose it, temporarily set
+   `AMULIO_E2E_FIXTURE_MEDIA_ID` to the IMDb id of another movie you can open.
+   This changes only where the legal fixture appears; its filename and eD2K
+   source remain Big Buck Bunny. Remove the override after the test.
 3. Refresh streams until `Big.Buck.Bunny.2008.CC-BY-3.0.aMulio-E2E.mp4`
    appears as **Download with aMule**. It must be `notWebReady` at this stage.
 4. Select it once. Stremio must show the localized “download started” status
