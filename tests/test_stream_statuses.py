@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from amulio.amule_api import AmuleApiError
 from amulio.app import app
 from amulio.config import get_settings
+from amulio.profiles import ProfilePreferences
 
 
 def _configure(monkeypatch):
@@ -46,4 +47,23 @@ def test_amule_errors_return_an_explanatory_stremio_stream(monkeypatch):
     assert response.status_code == 200
     assert stream["name"] == "ℹ️ aMulio · aMule is unavailable"
     assert stream["url"].endswith("/assets/amule-unavailable.mp4")
+    get_settings.cache_clear()
+
+
+def test_spanish_profile_uses_localized_empty_and_unavailable_status_videos(monkeypatch):
+    async def no_candidates(**_kwargs):
+        return []
+
+    _configure(monkeypatch)
+    monkeypatch.setattr("amulio.app._discover_candidates", no_candidates)
+
+    with TestClient(app) as client:
+        profile = app.state.profile_store.create(ProfilePreferences(ui_language="es"))
+        response = client.get("/" + "i" * 24 + f"/profile/{profile.id}/stream/movie/tt1234567.json")
+        video = client.get("/assets/no-results.es.mp4")
+
+    stream = response.json()["streams"][0]
+    assert stream["name"] == "ℹ️ aMulio · No se encontraron archivos coincidentes"
+    assert stream["url"].endswith("/assets/no-results.es.mp4")
+    assert video.headers["content-type"] == "video/mp4"
     get_settings.cache_clear()

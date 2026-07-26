@@ -16,5 +16,10 @@ def test_status_videos_have_spanish_variants():
     assert "Descarga iniciada en aMule" in (ASSET_DIRECTORY / "download-started.es.svg").read_text()
     assert "Descargando en aMule" in (ASSET_DIRECTORY / "downloading.es.svg").read_text()
     assert "aMule no está disponible" in (ASSET_DIRECTORY / "amule-unavailable.es.svg").read_text()
+    assert (
+        "No se encontraron archivos coincidentes"
+        in (ASSET_DIRECTORY / "no-results.es.svg").read_text()
+    )
     assert status_video("started", locale="es").path.name == "download-started.es.mp4"
+    assert status_video("no_results", locale="es").path.name == "no-results.es.mp4"
     assert status_video("started", locale="unsupported").path.name == "download-started.mp4"

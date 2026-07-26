@@ -7,6 +7,9 @@ SUPPORTED_LOCALES: tuple[Locale, ...] = ("en", "es")
 MESSAGES: dict[Locale, dict[str, str]] = {
     "en": {
         "page_title": "Install aMulio for Stremio",
+        "brand_configuration": "aMulio configuration",
+        "amule_logo": "aMule logo",
+        "manifest_description": "Search eD2K/Kad content and play completed files from aMule.",
         "eyebrow": "YOUR PRIVATE STREMIO ADDON",
         "heading": "Connect Stremio to your aMule library.",
         "intro": (
@@ -94,6 +97,11 @@ MESSAGES: dict[Locale, dict[str, str]] = {
     },
     "es": {
         "page_title": "Instala aMulio para Stremio",
+        "brand_configuration": "Configuración de aMulio",
+        "amule_logo": "Logo de aMule",
+        "manifest_description": (
+            "Busca contenido eD2K/Kad y reproduce archivos completados de aMule."
+        ),
         "eyebrow": "TU ADDON PRIVADO DE STREMIO",
         "heading": "Conecta Stremio con tu biblioteca de aMule.",
         "intro": (

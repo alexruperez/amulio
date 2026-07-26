@@ -31,7 +31,7 @@ from amulio.profiles import AddonProfile, ProfilePreferences, ProfileStore
 from amulio.ranking import rank_results
 from amulio.rate_limit import SlidingWindowRateLimiter
 from amulio.search_locks import MediaSearchLocks
-from amulio.status_videos import status_video
+from amulio.status_videos import StatusVideoKind, status_video, status_video_filename
 from amulio.tokens import InvalidToken, sign, verify
 
 logger = logging.getLogger("amulio.app")
@@ -317,11 +317,16 @@ def _stream_response(candidates: list[Candidate], request: Request, cache: Candi
     }
 
 
-def _status_stream(settings: Settings, *, kind: str, label: str, detail: str) -> dict:
+def _status_stream(
+    settings: Settings, *, kind: StatusVideoKind, label: str, detail: str, locale: Locale = "en"
+) -> dict:
     return {
         "name": f"ℹ️ aMulio · {label}",
         "description": detail,
-        "url": f"{str(settings.public_url).rstrip('/')}/assets/{kind}.mp4",
+        "url": (
+            f"{str(settings.public_url).rstrip('/')}/assets/"
+            f"{status_video_filename(kind, locale=locale)}"
+        ),
         "behaviorHints": {"notWebReady": False},
     }
 
@@ -771,8 +776,8 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
   </head>
   <body>
     <main>
-      <a class="brand" href="/configure" aria-label="aMulio configuration">
-        <img src="{logo_url}" alt="aMule logo">
+      <a class="brand" href="/configure" aria-label="{t("brand_configuration")}">
+        <img src="{logo_url}" alt="{t("amule_logo")}">
         <span>aMulio</span>
       </a>
       <nav class="language" aria-label="{t("language")}"><span>{t("language")}:</span>{language_links}</nav>
@@ -969,11 +974,7 @@ def _manifest(settings: Settings, profile: AddonProfile | None = None) -> dict:
         "id": f"com.alexruperez.amulio{suffix}",
         "version": "0.1.0",
         "name": "aMulio",
-        "description": (
-            "Busca contenido eD2K/Kad y reproduce archivos completados de aMule."
-            if language == "es"
-            else "Search eD2K/Kad content and play completed files from aMule."
-        ),
+        "description": translate(language, "manifest_description"),
         "logo": (
             f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png?v={AMULE_LOGO_VERSION}"
         ),
@@ -1127,9 +1128,10 @@ async def _stream_listing(
             "streams": [
                 _status_stream(
                     settings,
-                    kind="amule-unavailable",
+                    kind="unavailable",
                     label=translate(locale, "stream_unavailable"),
                     detail=translate(locale, "stream_unavailable_detail"),
+                    locale=locale,
                 )
             ]
         }
@@ -1139,9 +1141,10 @@ async def _stream_listing(
             "streams": [
                 _status_stream(
                     settings,
-                    kind="no-results",
+                    kind="no_results",
                     label=translate(locale, "stream_no_results"),
                     detail=translate(locale, "stream_no_results_detail"),
+                    locale=locale,
                 )
             ]
         }

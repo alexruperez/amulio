@@ -314,8 +314,8 @@ connector avoids opening an inbound web port on the Home Assistant host.
 
 - [x] Import the official aMule icon with provenance and per-asset licensing.
 - [x] Serve versioned logo assets and include the logo in the Stremio manifest.
-- [ ] Extract every user-facing string into translation resources.
-- [ ] Complete English as the default and Spanish as a fully tested locale.
+- [x] Extract every user-facing string into translation resources.
+- [x] Complete English as the default and Spanish as a fully tested locale.
 - [x] Localise status videos or replace embedded text with language-neutral
   visuals plus translated stream descriptions.
 
@@ -330,7 +330,7 @@ flow.
 
 - [x] Use distinct **Ready to play**, **Download with aMule** and
   **Downloading** labels and icons.
-- [ ] Present quality, size, language and sources without implying that a
+- [x] Present quality, size, language and sources without implying that a
   remote result is already cached.
 - [x] Return a useful empty/error state when eD2K/Kad is disconnected or no
   acceptable candidate exists.
