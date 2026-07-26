@@ -55,6 +55,21 @@ def test_configuration_page_serves_the_amule_logo(monkeypatch):
     get_settings.cache_clear()
 
 
+def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        configured = client.get("/configure?lang=es")
+
+    assert '<html lang="es">' in configured.text
+    assert "Instalar en Stremio" in configured.text
+    assert "Estado de la instancia" in configured.text
+    get_settings.cache_clear()
+
+
 def test_configuration_readiness_is_private_and_exposes_only_safe_connection_states(
     monkeypatch, tmp_path
 ):

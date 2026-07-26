@@ -22,6 +22,7 @@ from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings, get_settings
 from amulio.events import MonitorHealth, monitor_events, stop_monitor
+from amulio.i18n import Locale, resolve_locale, translate
 from amulio.local_media import discover_local_media
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
@@ -440,7 +441,7 @@ async def root() -> RedirectResponse:
 
 @app.get("/configure", response_class=HTMLResponse)
 async def configure(request: Request):
-    return _configuration_page(_settings(request))
+    return _configuration_page(_settings(request), resolve_locale(request.query_params.get("lang")))
 
 
 @app.get("/{installation_token}/configure", response_class=HTMLResponse)
@@ -448,7 +449,7 @@ async def tokenized_configure(installation_token: str, request: Request):
     """Serve Stremio's configuration URL, which is relative to the manifest."""
     settings = _settings(request)
     _require_install_token(installation_token, settings)
-    return _configuration_page(settings)
+    return _configuration_page(settings, resolve_locale(request.query_params.get("lang")))
 
 
 def _connection_state(value: object) -> str:
@@ -583,7 +584,7 @@ async def revoke_profile(profile_id: str, request: Request, profiles: Profiles) 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
-def _configuration_page(settings: Settings) -> str:
+def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
     manifest_url = (
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/manifest.json"
@@ -596,13 +597,39 @@ def _configuration_page(settings: Settings) -> str:
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/configure/status"
     )
+
+    def t(key: str) -> str:
+        return html.escape(translate(locale, key))
+
+    status_labels = json.dumps(
+        {
+            key: translate(locale, key)
+            for key in (
+                "connected",
+                "connecting",
+                "disconnected",
+                "ready",
+                "configured",
+                "unavailable",
+                "unknown",
+            )
+        }
+    ).replace("</", "<\\/")
+    language_links = " ".join(
+        '<a href="?lang={language}"{current}>{label}</a>'.format(
+            language=language,
+            current=' aria-current="page"' if language == locale else "",
+            label=t("english" if language == "en" else "spanish"),
+        )
+        for language in ("en", "es")
+    )
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{locale}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#101827">
-    <title>Install aMulio for Stremio</title>
+    <title>{t("page_title")}</title>
     <style>
       :root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
       * {{ box-sizing: border-box; }}
@@ -610,6 +637,9 @@ def _configuration_page(settings: Settings) -> str:
       main {{ width: min(100% - 2rem, 46rem); margin: 0 auto; padding: 4.5rem 0 3rem; }}
       .brand {{ display: inline-flex; align-items: center; gap: .7rem; color: #fff; font-size: 1.35rem; font-weight: 700; text-decoration: none; }}
       .brand img {{ width: 2.25rem; height: auto; image-rendering: auto; }}
+      .language {{ float: right; display: flex; align-items: center; gap: .55rem; color: #9dacbd; font-size: .82rem; }}
+      .language a {{ color: #dbe5f0; text-decoration: none; }}
+      .language a[aria-current="page"] {{ color: #8eeaac; font-weight: 800; }}
       .card {{ margin-top: 2.5rem; padding: clamp(1.5rem, 5vw, 3rem); border: 1px solid rgba(255,255,255,.12); border-radius: 1.5rem; background: rgba(18, 29, 47, .78); box-shadow: 0 2rem 5rem rgba(0,0,0,.28); backdrop-filter: blur(18px); }}
       .eyebrow {{ margin: 0 0 .8rem; color: #78d39a; font-size: .75rem; font-weight: 800; letter-spacing: .12em; }}
       h1 {{ max-width: 38rem; margin: 0; color: #fff; font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; }}
@@ -636,7 +666,7 @@ def _configuration_page(settings: Settings) -> str:
       .hint {{ margin: 1.1rem 0 0; color: #9dacbd; font-size: .86rem; line-height: 1.55; }}
       .hint strong {{ color: #dbe5f0; }}
       footer {{ margin-top: 1.5rem; color: #8190a4; font-size: .78rem; text-align: center; }}
-      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
+      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .language {{ margin-top: .5rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
     </style>
   </head>
   <body>
@@ -645,48 +675,49 @@ def _configuration_page(settings: Settings) -> str:
         <img src="/assets/amule-logo.png" alt="aMule logo">
         <span>aMulio</span>
       </a>
+      <nav class="language" aria-label="{t("language")}"><span>{t("language")}:</span>{language_links}</nav>
       <section class="card" aria-labelledby="install-title">
-        <p class="eyebrow">YOUR PRIVATE STREMIO ADDON</p>
-        <h1 id="install-title">Connect Stremio to your aMule library.</h1>
-        <p class="intro">Find eD2K and Kad content, queue downloads with aMule, and play completed files from storage you control.</p>
-        <section class="readiness" id="readiness" data-status-url="{status_url}" aria-live="polite" aria-label="Instance readiness">
-          <h2>Instance readiness</h2>
+        <p class="eyebrow">{t("eyebrow")}</p>
+        <h1 id="install-title">{t("heading")}</h1>
+        <p class="intro">{t("intro")}</p>
+        <section class="readiness" id="readiness" data-status-url="{status_url}" aria-live="polite" aria-label="{t("readiness")}">
+          <h2>{t("readiness")}</h2>
           <div class="status-grid">
-            <div class="status" data-key="amuleapi"><span class="status-label">amuleapi</span><span class="status-value">Checking…</span></div>
-            <div class="status" data-key="ed2k"><span class="status-label">eD2K</span><span class="status-value">Checking…</span></div>
-            <div class="status" data-key="kad"><span class="status-label">Kad</span><span class="status-value">Checking…</span></div>
-            <div class="status" data-key="incoming_storage"><span class="status-label">Incoming storage</span><span class="status-value">Checking…</span></div>
-            <div class="status" data-key="public_url"><span class="status-label">Public URL</span><span class="status-value">Checking…</span></div>
+            <div class="status" data-key="amuleapi"><span class="status-label">{t("amuleapi")}</span><span class="status-value">{t("checking")}</span></div>
+            <div class="status" data-key="ed2k"><span class="status-label">{t("ed2k")}</span><span class="status-value">{t("checking")}</span></div>
+            <div class="status" data-key="kad"><span class="status-label">{t("kad")}</span><span class="status-value">{t("checking")}</span></div>
+            <div class="status" data-key="incoming_storage"><span class="status-label">{t("incoming_storage")}</span><span class="status-value">{t("checking")}</span></div>
+            <div class="status" data-key="public_url"><span class="status-label">{t("public_url")}</span><span class="status-value">{t("checking")}</span></div>
           </div>
         </section>
         <div class="features">
-          <div class="feature"><strong>Private by design</strong>Your manifest URL is a private capability.</div>
-          <div class="feature"><strong>Self-hosted</strong>aMule and your media stay under your control.</div>
-          <div class="feature"><strong>Ready to watch</strong>Completed media plays directly in Stremio.</div>
+          <div class="feature"><strong>{t("private_title")}</strong>{t("private_body")}</div>
+          <div class="feature"><strong>{t("self_hosted_title")}</strong>{t("self_hosted_body")}</div>
+          <div class="feature"><strong>{t("ready_title")}</strong>{t("ready_body")}</div>
         </div>
-        <label for="manifest-url">Your Stremio manifest URL</label>
+        <label for="manifest-url">{t("manifest_label")}</label>
         <code id="manifest-url">{safe_manifest_url}</code>
         <div class="actions">
-          <a class="button" href="{stremio_url}">Install in Stremio</a>
-          <button class="button secondary" type="button" id="copy-button">Copy manifest URL</button>
+          <a class="button" href="{stremio_url}">{t("install")}</a>
+          <button class="button secondary" type="button" id="copy-button">{t("copy")}</button>
         </div>
-        <p class="hint"><strong>Tip:</strong> if Stremio does not open automatically, copy this URL and paste it into Stremio's addon search. Keep it private.</p>
+        <p class="hint"><strong>{t("tip_label")}</strong> {t("tip")}</p>
       </section>
-      <footer>aMulio is a self-hosted Stremio addon powered by aMule.</footer>
+      <footer>{t("footer")}</footer>
     </main>
     <script>
       const copyButton = document.getElementById("copy-button");
       const manifestUrl = document.getElementById("manifest-url").textContent;
       const readiness = document.getElementById("readiness");
-      const statusLabels = {{ connected: "Connected", connecting: "Connecting", disconnected: "Disconnected", ready: "Ready", configured: "Configured", unavailable: "Unavailable", unknown: "Unknown" }};
+      const statusLabels = {status_labels};
       copyButton.addEventListener("click", async () => {{
         try {{
           await navigator.clipboard.writeText(manifestUrl);
-          copyButton.textContent = "Copied!";
+          copyButton.textContent = "{t("copied")}";
         }} catch {{
-          copyButton.textContent = "Copy failed — select the URL";
+          copyButton.textContent = "{t("copy_failed")}";
         }}
-        window.setTimeout(() => {{ copyButton.textContent = "Copy manifest URL"; }}, 2400);
+        window.setTimeout(() => {{ copyButton.textContent = "{t("copy")}"; }}, 2400);
       }});
       fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }})
         .then((response) => {{ if (!response.ok) throw new Error("readiness unavailable"); return response.json(); }})
@@ -695,13 +726,13 @@ def _configuration_page(settings: Settings) -> str:
             const item = readiness.querySelector(`[data-key="${{key}}"]`);
             if (!item) return;
             item.dataset.state = state;
-            item.querySelector(".status-value").textContent = statusLabels[state] || "Unknown";
+            item.querySelector(".status-value").textContent = statusLabels[state] || statusLabels.unknown;
           }});
         }})
         .catch(() => {{
           readiness.querySelectorAll(".status").forEach((item) => {{
             item.dataset.state = "unavailable";
-            item.querySelector(".status-value").textContent = "Unavailable";
+            item.querySelector(".status-value").textContent = statusLabels.unavailable;
           }});
         }});
     </script>
