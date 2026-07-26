@@ -31,3 +31,4 @@ class Candidate(BaseModel):
     hdr: bool = False
     release_group: str | None = None
     score: int = 0
+    local_path: str | None = None

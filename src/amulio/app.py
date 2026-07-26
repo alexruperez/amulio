@@ -14,6 +14,7 @@ from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings, get_settings
 from amulio.events import MonitorHealth, monitor_events, stop_monitor
+from amulio.local_media import discover_local_media
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.observability import MetricsRegistry, configure_logging
@@ -288,6 +289,12 @@ async def _discover_candidates(
         try:
             async with asyncio.timeout(settings.search_timeout_seconds):
                 resolved = await metadata.resolve(media_type, media_id)
+                local_candidates = discover_local_media(resolved, settings)
+                if local_candidates:
+                    cache.put(
+                        media_key, local_candidates, ttl_seconds=settings.candidate_ttl_seconds
+                    )
+                    return local_candidates
                 queries = resolved.search_queries(
                     preferred_languages=settings.search_languages,
                     limit=settings.search_query_limit,
@@ -472,6 +479,10 @@ async def play(token: str, request: Request, api: ApiClient, cache: Cache):
     except (InvalidToken, KeyError):
         raise HTTPException(status_code=404) from None
 
+    if candidate.local_path is not None:
+        _safe_media_path(candidate.local_path, settings=settings)
+        return RedirectResponse(f"/file/{token}", status_code=307)
+
     queued = False
     try:
         async with request.app.state.download_locks.acquire(f"download:{candidate.hash}"):
@@ -508,6 +519,14 @@ async def file(token: str, request: Request, api: ApiClient):
         )
     except (InvalidToken, KeyError):
         raise HTTPException(status_code=404) from None
+
+    if candidate.local_path is not None:
+        path = _safe_media_path(candidate.local_path, settings=settings)
+        if path.name != candidate.name or path.stat().st_size != candidate.size:
+            raise HTTPException(
+                status_code=409, detail="The completed file no longer matches this stream"
+            )
+        return FileResponse(path, filename=candidate.name, content_disposition_type="inline")
 
     try:
         completed = await _resolve_completed_file(candidate, api)
