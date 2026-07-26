@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache
 from amulio.config import Settings, get_settings
+from amulio.events import monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.ranking import rank_results
@@ -47,7 +48,12 @@ async def lifespan(app: FastAPI):
     )
     app.state.metadata = CinemetaClient(base_url=str(settings.cinemeta_base_url))
     app.state.cache = CandidateCache(settings.database_path)
+    app.state.event_monitor = asyncio.create_task(
+        monitor_events(app.state.amule_api, app.state.cache),
+        name="amulio-amuleapi-events",
+    )
     yield
+    await stop_monitor(app.state.event_monitor)
     await app.state.amule_api.close()
     await app.state.metadata.close()
     app.state.cache.close()
@@ -72,7 +78,15 @@ def _require_install_token(token: str, settings: Settings) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
-def _stream_object(candidate: Candidate, request: Request) -> dict:
+def _state_marker(state: str | None) -> str:
+    if state == "ready":
+        return "✅"
+    if state == "downloading":
+        return "⬇️"
+    return "🧲"
+
+
+def _stream_object(candidate: Candidate, request: Request, *, state: str | None = None) -> dict:
     settings = _settings(request)
     token = sign(
         {"candidate": candidate.model_dump()},
@@ -80,7 +94,7 @@ def _stream_object(candidate: Candidate, request: Request) -> dict:
         ttl_seconds=settings.candidate_ttl_seconds,
     )
     return {
-        "name": f"Amulio · {candidate.quality or 'video'}",
+        "name": f"{_state_marker(state)} Amulio · {candidate.quality or 'video'}",
         "description": (
             f"{candidate.name}\n"
             f"💾 {candidate.size / 1_000_000_000:.2f} GB · "
@@ -94,6 +108,16 @@ def _stream_object(candidate: Candidate, request: Request) -> dict:
             "notWebReady": True,
             "bingeGroup": f"amulio|{candidate.hash}",
         },
+    }
+
+
+def _stream_response(candidates: list[Candidate], request: Request, cache: CandidateCache) -> dict:
+    states = cache.file_states([candidate.hash for candidate in candidates])
+    return {
+        "streams": [
+            _stream_object(candidate, request, state=states.get(candidate.hash))
+            for candidate in candidates
+        ]
     }
 
 
@@ -176,7 +200,7 @@ async def streams(
         media_key = f"{media_type}:{media_id}"
         candidates = cache.get(media_key)
         if candidates is not None:
-            return {"streams": [_stream_object(candidate, request) for candidate in candidates]}
+            return _stream_response(candidates, request, cache)
         search_ids = await asyncio.gather(
             api.start_search(resolved.search_query, kind="global"),
             api.start_search(resolved.search_query, kind="kad"),
@@ -193,8 +217,7 @@ async def streams(
         resolved,
     )
     cache.put(media_key, candidates, ttl_seconds=settings.candidate_ttl_seconds)
-    stream_results = [_stream_object(candidate, request) for candidate in candidates if candidate]
-    return {"streams": stream_results}
+    return _stream_response(candidates, request, cache)
 
 
 @app.get("/play/{token}")

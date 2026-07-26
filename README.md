@@ -79,6 +79,7 @@ contains:
 - IMDb/Cinemeta title resolution for movies and series episodes.
 - Parallel eD2K global and Kad searches through authenticated `amuleapi`.
 - SQLite result caching and conservative filename/episode/quality ranking.
+- Live download and shared-file state updates from `amuleapi` Server-Sent Events.
 - Signed stream URLs that do not expose aMule credentials.
 - Enqueueing selected eD2K links in aMule.
 - Safe playback of completed files from approved Incoming roots.
@@ -86,7 +87,6 @@ contains:
 
 ### Next milestones
 
-- Live aMule progress through Server-Sent Events.
 - A Stremio-friendly “download started / still downloading” status video.
 - Better aliases, languages, release parsing and ranking rules.
 - Docker image for a pinned aMule 3.1 build with `amuleapi` enabled.

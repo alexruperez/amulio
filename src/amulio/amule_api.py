@@ -1,4 +1,6 @@
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -92,3 +94,34 @@ class AmuleApiClient:
             raise AmuleApiError(f"amuleapi download lookup failed ({response.status_code})")
         result = AmuleFile.model_validate(response.json())
         return result if result.status == "completed" else None
+
+    async def events(self) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield amuleapi SSE frames for downloads and shared files."""
+        token = await self._login()
+        async with self._client.stream(
+            "GET",
+            "events",
+            params={"channels": "downloads,shared"},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=None,
+        ) as response:
+            if response.is_error:
+                raise AmuleApiError(f"amuleapi events failed ({response.status_code})")
+            event_name = "message"
+            data_lines: list[str] = []
+            async for line in response.aiter_lines():
+                if not line:
+                    if data_lines:
+                        try:
+                            data = json.loads("\n".join(data_lines))
+                        except json.JSONDecodeError:
+                            data = None
+                        if isinstance(data, dict):
+                            yield event_name, data
+                    event_name = "message"
+                    data_lines = []
+                    continue
+                if line.startswith("event:"):
+                    event_name = line.removeprefix("event:").strip()
+                elif line.startswith("data:"):
+                    data_lines.append(line.removeprefix("data:").lstrip())

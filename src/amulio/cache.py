@@ -21,6 +21,15 @@ class CandidateCache:
             )
             """
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS file_state (
+                file_hash TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """
+        )
         self._connection.commit()
 
     def close(self) -> None:
@@ -49,3 +58,26 @@ class CandidateCache:
             (media_key, serialized, expires_at),
         )
         self._connection.commit()
+
+    def set_file_state(self, file_hash: str, state: str) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO file_state (file_hash, state, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(file_hash) DO UPDATE SET
+                state = excluded.state,
+                updated_at = excluded.updated_at
+            """,
+            (file_hash.lower(), state, int(time.time())),
+        )
+        self._connection.commit()
+
+    def file_states(self, file_hashes: list[str]) -> dict[str, str]:
+        if not file_hashes:
+            return {}
+        placeholders = ",".join("?" for _ in file_hashes)
+        rows = self._connection.execute(
+            f"SELECT file_hash, state FROM file_state WHERE file_hash IN ({placeholders})",
+            [file_hash.lower() for file_hash in file_hashes],
+        ).fetchall()
+        return dict(rows)
