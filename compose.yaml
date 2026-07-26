@@ -1,0 +1,38 @@
+services:
+  amulio:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Keep this path identical to aMule's Incoming directory.
+      - ${AMULE_INCOMING_HOST_PATH:-./data/incoming}:/data/incoming:ro
+    ports:
+      - "${AMULIO_PORT:-8000}:8000"
+    networks: [frontend, backend]
+
+  # amuleapi must be built from aMule master with BUILD_AMULEAPI=ON until 3.1.0 ships.
+  # It intentionally has no published port; Amulio is its only HTTP client.
+  amuleapi:
+    image: ${AMULE_API_IMAGE:-ghcr.io/replace-me/amuleapi:master}
+    profiles: [amule]
+    restart: unless-stopped
+    environment:
+      AMULEAPI_BIND: 0.0.0.0
+    volumes:
+      - ${AMULE_INCOMING_HOST_PATH:-./data/incoming}:/data/incoming
+      - ${AMULE_TEMP_HOST_PATH:-./data/temp}:/data/temp
+      - amule_config:/data/config
+    expose:
+      - "4713"
+    networks: [backend]
+
+volumes:
+  amule_config:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    internal: true
