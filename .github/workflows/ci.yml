@@ -28,7 +28,7 @@ jobs:
       - run: >-
           uv run pytest -rs --cov=amulio --cov-report=term-missing
           --cov-report=xml:coverage.xml --cov-fail-under=82
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ github.sha }}
