@@ -18,6 +18,7 @@ from amulio.local_media import discover_local_media
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.observability import MetricsRegistry, configure_logging
+from amulio.profiles import ProfileStore
 from amulio.ranking import rank_results
 from amulio.rate_limit import SlidingWindowRateLimiter
 from amulio.search_locks import MediaSearchLocks
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI):
         metadata_ttl_seconds=settings.metadata_cache_ttl_seconds,
     )
     app.state.cache = CandidateCache(settings.database_path)
+    app.state.profile_store = ProfileStore(settings.database_path)
     app.state.search_locks = MediaSearchLocks()
     app.state.download_locks = MediaSearchLocks()
     app.state.monitor_health = MonitorHealth()
@@ -83,6 +85,7 @@ async def lifespan(app: FastAPI):
     await app.state.amule_api.close()
     await app.state.metadata.close()
     app.state.cache.close()
+    app.state.profile_store.close()
 
 
 app = FastAPI(title="aMulio", version="0.1.0", lifespan=lifespan)

@@ -289,9 +289,9 @@ connector avoids opening an inbound web port on the Home Assistant host.
 
 ### 6.1 Build the configuration model
 
-- [ ] Define versioned user settings for UI language, preferred result
+- [x] Define versioned user settings for UI language, preferred result
   languages, quality filters, result limit, maximum size and season packs.
-- [ ] Store profiles server-side under random, revocable configuration IDs;
+- [x] Store profiles server-side under random, revocable configuration IDs;
   never put aMule credentials in a manifest URL.
 - [ ] Separate read-only Stremio capabilities from an authenticated
   administrator session; possession of a manifest URL must not grant profile
