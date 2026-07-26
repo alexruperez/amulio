@@ -53,6 +53,9 @@ async def test_concurrent_discovery_starts_each_amule_search_once(tmp_path):
                 )
             ]
 
+        async def stop_search(self, search_id: str, *, close: bool) -> None:
+            return None
+
     cache = CandidateCache(str(tmp_path / "cache.sqlite3"))
     settings = Settings(
         install_token="i" * 24,

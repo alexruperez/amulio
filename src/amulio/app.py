@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -16,6 +17,8 @@ from amulio.models import Candidate
 from amulio.ranking import rank_results
 from amulio.search_locks import MediaSearchLocks
 from amulio.tokens import InvalidToken, sign, verify
+
+logger = logging.getLogger(__name__)
 
 
 def _get_api(request: Request) -> AmuleApiClient:
@@ -173,6 +176,7 @@ async def _discover_candidates(
         if cached is not None:
             return cached
 
+        search_ids: tuple[int, ...] = ()
         try:
             async with asyncio.timeout(settings.search_timeout_seconds):
                 resolved = await metadata.resolve(media_type, media_id)
@@ -180,11 +184,13 @@ async def _discover_candidates(
                     preferred_languages=settings.search_languages,
                     limit=settings.search_query_limit,
                 )
-                search_ids = await asyncio.gather(
-                    *(
-                        api.start_search(query, kind=kind)
-                        for query in queries
-                        for kind in ("global", "kad")
+                search_ids = tuple(
+                    await asyncio.gather(
+                        *(
+                            api.start_search(query, kind=kind)
+                            for query in queries
+                            for kind in ("global", "kad")
+                        )
                     )
                 )
                 await asyncio.sleep(settings.search_wait_seconds)
@@ -193,6 +199,14 @@ async def _discover_candidates(
                 )
         except TimeoutError as exc:
             raise AmuleApiError("aMule search timed out") from exc
+        finally:
+            cleanup_results = await asyncio.gather(
+                *(api.stop_search(search_id, close=True) for search_id in search_ids),
+                return_exceptions=True,
+            )
+            for search_id, cleanup_result in zip(search_ids, cleanup_results, strict=True):
+                if isinstance(cleanup_result, Exception):
+                    logger.warning("Could not close aMule search %s: %s", search_id, cleanup_result)
         candidates = rank_results(
             [result for result_set in result_sets for result in result_set],
             resolved,

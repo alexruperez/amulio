@@ -61,8 +61,8 @@ at most one global search and one Kad search in aMule.
 - [x] Generate a bounded set of queries: canonical title/year, original title,
   and exact `SxxEyy` variants for episodes.
 - [x] Enforce a bounded timeout for each discovery cycle.
-- [ ] Close stale aMule search sessions after validating the corresponding
-  `amuleapi` operation against the target aMule 3.1 build.
+- [x] Close stale aMule search sessions with `POST /search/stop` and
+  `close: true`, validated against the upstream aMule 3.1 `amuleapi` source.
 
 **Acceptance:** test fixtures cover films with translated titles and series
 episodes whose filename uses `S02E04`, `2x04` or equivalent notation.
@@ -186,9 +186,8 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Finish **Phase 1.2: metadata and query generation** by validating and adding
-remote aMule search-session cleanup. Do not guess the API endpoint: confirm it
-against the pinned aMule 3.1 build first.
+Continue with **Phase 1.3: ranking hardening**. Discovery now has bounded,
+language-aware queries and closes its remote aMule search sessions.
 
 Before changing behavior, run:
 

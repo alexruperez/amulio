@@ -70,6 +70,9 @@ class AmuleApiClient:
         results = response.json().get("results", [])
         return [AmuleSearchResult.model_validate(item) for item in results]
 
+    async def stop_search(self, search_id: int, *, close: bool = True) -> None:
+        await self._request("POST", "search/stop", json={"search_id": search_id, "close": close})
+
     async def add_download(self, ed2k_link: str) -> None:
         await self._request("POST", "downloads", json={"ed2k_link": ed2k_link})
 
