@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from amulio.app import app
+from amulio.app import AMULE_LOGO_VERSION, app
 from amulio.config import get_settings
 from amulio.models import Candidate
 from amulio.profiles import ProfilePreferences
@@ -18,7 +18,7 @@ def test_private_manifest_requires_the_installation_token(monkeypatch):
 
     assert manifest.status_code == 200
     assert manifest.json()["behaviorHints"]["p2p"] is True
-    assert manifest.json()["logo"].endswith("/assets/amule-logo.png")
+    assert manifest.json()["logo"].endswith(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
     assert "configurable" not in manifest.json()["behaviorHints"]
     assert "configurationRequired" not in manifest.json()["behaviorHints"]
     assert rejected.status_code == 404
@@ -50,7 +50,7 @@ def test_configuration_page_serves_the_amule_logo(monkeypatch):
     get_settings.cache_clear()
 
     with TestClient(app) as client:
-        logo = client.get("/assets/amule-logo.png")
+        logo = client.get(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
 
     assert logo.status_code == 200
     assert logo.headers["content-type"] == "image/png"

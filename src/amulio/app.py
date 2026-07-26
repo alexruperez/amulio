@@ -105,6 +105,7 @@ async def lifespan(app: FastAPI):
 
 
 ASSET_DIRECTORY = Path(__file__).with_name("assets")
+AMULE_LOGO_VERSION = "ba6013323359a1fa28a932b2acef5f65b709923a298c4fa9fc5379a1a46b80e4"
 
 app = FastAPI(title="aMulio", version="0.1.0", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory=ASSET_DIRECTORY), name="assets")
@@ -676,6 +677,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/configure/status"
     )
+    logo_url = html.escape(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
 
     def t(key: str) -> str:
         return html.escape(translate(locale, key))
@@ -764,7 +766,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
   <body>
     <main>
       <a class="brand" href="/configure" aria-label="aMulio configuration">
-        <img src="/assets/amule-logo.png" alt="aMule logo">
+        <img src="{logo_url}" alt="aMule logo">
         <span>aMulio</span>
       </a>
       <nav class="language" aria-label="{t("language")}"><span>{t("language")}:</span>{language_links}</nav>
@@ -932,7 +934,9 @@ def _manifest(settings: Settings, profile: AddonProfile | None = None) -> dict:
             if language == "es"
             else "Search eD2K/Kad content and play completed files from aMule."
         ),
-        "logo": f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png",
+        "logo": (
+            f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png?v={AMULE_LOGO_VERSION}"
+        ),
         "catalogs": [],
         "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],
         "types": ["movie", "series"],

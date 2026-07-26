@@ -312,8 +312,8 @@ connector avoids opening an inbound web port on the Home Assistant host.
 
 ### 6.3 Add official branding and i18n
 
-- [ ] Import the official aMule icon with provenance and per-asset licensing.
-- [ ] Serve versioned logo assets and include the logo in the Stremio manifest.
+- [x] Import the official aMule icon with provenance and per-asset licensing.
+- [x] Serve versioned logo assets and include the logo in the Stremio manifest.
 - [ ] Extract every user-facing string into translation resources.
 - [ ] Complete English as the default and Spanish as a fully tested locale.
 - [x] Localise status videos or replace embedded text with language-neutral
