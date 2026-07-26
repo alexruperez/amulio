@@ -408,7 +408,9 @@ async def manifest(installation_token: str, request: Request):
         "catalogs": [],
         "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],
         "types": ["movie", "series"],
-        "behaviorHints": {"configurable": True, "configurationRequired": True, "p2p": True},
+        # This initial release has no per-user options.  Declaring it configurable
+        # would make Stremio route users to ``/<token>/configure`` indefinitely.
+        "behaviorHints": {"p2p": True},
     }
 
 

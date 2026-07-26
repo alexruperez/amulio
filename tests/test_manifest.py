@@ -16,6 +16,8 @@ def test_private_manifest_requires_the_installation_token(monkeypatch):
 
     assert manifest.status_code == 200
     assert manifest.json()["behaviorHints"]["p2p"] is True
+    assert "configurable" not in manifest.json()["behaviorHints"]
+    assert "configurationRequired" not in manifest.json()["behaviorHints"]
     assert rejected.status_code == 404
     get_settings.cache_clear()
 
