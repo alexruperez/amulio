@@ -213,7 +213,9 @@ def _stream_object(
         "behaviorHints": {
             "filename": candidate.name,
             "videoSize": candidate.size,
-            "notWebReady": True,
+            # Completed local media is served as ordinary HTTPS byte ranges and
+            # can be played by Stremio Web. Pending P2P downloads cannot.
+            "notWebReady": candidate.local_path is None,
             "bingeGroup": f"amulio|{candidate.hash}",
         },
     }
