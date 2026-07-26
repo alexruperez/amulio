@@ -69,12 +69,12 @@ episodes whose filename uses `S02E04`, `2x04` or equivalent notation.
 
 ### 1.3 Harden ranking
 
-- [ ] Add size plausibility ranges per type and detected quality.
-- [ ] Detect season packs and reject them for an episode unless explicitly
+- [x] Add size plausibility ranges per type and detected quality.
+- [x] Detect season packs and reject them for an episode unless explicitly
   enabled.
-- [ ] Add configurable extension allow/deny lists.
-- [ ] Include language, codec, HDR and release-group signals in the score.
-- [ ] Persist ranking fixtures collected from legal/public test names.
+- [x] Add configurable extension allow/deny lists.
+- [x] Include language, codec, HDR and release-group signals in the score.
+- [x] Persist ranking fixtures collected from legal/public test names.
 
 **Acceptance:** ranking tests reject archives, samples, wrong years and wrong
 episodes while keeping the intended release at the top.
@@ -186,8 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 1.3: ranking hardening**. Discovery now has bounded,
-language-aware queries and closes its remote aMule search sessions.
+Continue with **Phase 2.1: SSE state reconciliation**. Discovery now has
+bounded, language-aware queries, hardened ranking and closes remote aMule
+search sessions.
 
 Before changing behavior, run:
 

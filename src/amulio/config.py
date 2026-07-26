@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     cinemeta_base_url: AnyHttpUrl = "https://v3-cinemeta.strem.io/"
     metadata_cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     preferred_languages: str = "en,es"
+    allowed_video_extensions: str = ".avi,.m4v,.mkv,.mov,.mp4,.mpeg,.mpg,.ts,.webm"
+    denied_file_extensions: str = ".exe,.iso,.rar,.zip"
+    allow_season_packs: bool = False
     search_query_limit: int = Field(default=3, ge=1, le=5)
     search_wait_seconds: float = Field(default=1.0, ge=0, le=10)
     search_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
@@ -45,6 +48,22 @@ class Settings(BaseSettings):
             for language in self.preferred_languages.split(",")
             if language.strip()
         )
+
+    @staticmethod
+    def _extensions(value: str) -> tuple[str, ...]:
+        return tuple(
+            extension if extension.startswith(".") else f".{extension}"
+            for item in value.split(",")
+            if (extension := item.strip().lower())
+        )
+
+    @property
+    def allowed_extensions(self) -> tuple[str, ...]:
+        return self._extensions(self.allowed_video_extensions)
+
+    @property
+    def denied_extensions(self) -> tuple[str, ...]:
+        return self._extensions(self.denied_file_extensions)
 
 
 @lru_cache

@@ -210,6 +210,10 @@ async def _discover_candidates(
         candidates = rank_results(
             [result for result_set in result_sets for result in result_set],
             resolved,
+            allowed_extensions=settings.allowed_extensions,
+            denied_extensions=settings.denied_extensions,
+            allow_season_packs=settings.allow_season_packs,
+            preferred_languages=settings.search_languages,
         )
         cache.put(
             media_key,

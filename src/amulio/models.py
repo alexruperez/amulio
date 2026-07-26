@@ -26,4 +26,8 @@ class Candidate(BaseModel):
     sources_complete: int = 0
     ed2k_link: str
     quality: str | None = None
+    language: str | None = None
+    codec: str | None = None
+    hdr: bool = False
+    release_group: str | None = None
     score: int = 0

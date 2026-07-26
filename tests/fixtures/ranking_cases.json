@@ -1,0 +1,19 @@
+{
+  "localized_movie": {
+    "metadata": {"title": "Example Film", "year": 2026},
+    "results": [
+      {
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "name": "Example.Film.2026.1080p.BluRay.x264.English-GROUP.mkv",
+        "size": 2000000000,
+        "sources": {"total": 20, "complete": 10}
+      },
+      {
+        "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "name": "Example.Film.2026.1080p.HDR.HEVC.Spanish-QUALITY.mkv",
+        "size": 2000000000,
+        "sources": {"total": 20, "complete": 10}
+      }
+    ]
+  }
+}
