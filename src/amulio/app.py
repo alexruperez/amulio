@@ -1,12 +1,14 @@
 import asyncio
 import logging
+import secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
@@ -14,13 +16,14 @@ from amulio.config import Settings, get_settings
 from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
+from amulio.observability import MetricsRegistry, configure_logging
 from amulio.ranking import rank_results
 from amulio.rate_limit import SlidingWindowRateLimiter
 from amulio.search_locks import MediaSearchLocks
 from amulio.status_videos import status_video
 from amulio.tokens import InvalidToken, sign, verify
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("amulio.app")
 
 
 def _get_api(request: Request) -> AmuleApiClient:
@@ -53,6 +56,7 @@ SearchLocks = Annotated[MediaSearchLocks, Depends(_get_search_locks)]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
     settings = get_settings()
     app.state.settings = settings
     app.state.amule_api = AmuleApiClient(
@@ -68,6 +72,7 @@ async def lifespan(app: FastAPI):
     app.state.download_locks = MediaSearchLocks()
     app.state.monitor_health = MonitorHealth()
     app.state.rate_limiter = SlidingWindowRateLimiter()
+    app.state.metrics = MetricsRegistry()
     app.state.event_monitor = asyncio.create_task(
         monitor_events(app.state.amule_api, app.state.cache, health=app.state.monitor_health),
         name="amulio-amuleapi-events",
@@ -89,8 +94,59 @@ app.add_middleware(
 )
 
 
+def _observability_route(path: str) -> str:
+    if path.startswith("/play/"):
+        return "/play/{token}"
+    if path.startswith("/file/"):
+        return "/file/{token}"
+    if path.endswith("/manifest.json"):
+        return "/{installation_token}/manifest.json"
+    if "/stream/" in path:
+        return "/{installation_token}/stream/{media_type}/{media_id}.json"
+    return path if path in {"/", "/configure", "/health", "/metrics"} else "/unknown"
+
+
+@app.middleware("http")
+async def observe_requests(request: Request, call_next):
+    started_at = time.perf_counter()
+    route = _observability_route(request.url.path)
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration = time.perf_counter() - started_at
+        _metrics(request).observe_request(
+            method=request.method, route=route, status_code=500, duration=duration
+        )
+        logger.exception(
+            "http_request_failed method=%s route=%s status=500 duration_ms=%.1f",
+            request.method,
+            route,
+            duration * 1000,
+        )
+        raise
+    duration = time.perf_counter() - started_at
+    _metrics(request).observe_request(
+        method=request.method, route=route, status_code=response.status_code, duration=duration
+    )
+    logger.info(
+        "http_request method=%s route=%s status=%s duration_ms=%.1f",
+        request.method,
+        route,
+        response.status_code,
+        duration * 1000,
+    )
+    return response
+
+
 def _settings(request: Request) -> Settings:
     return request.app.state.settings
+
+
+def _metrics(request: Request) -> MetricsRegistry:
+    metrics = getattr(request.app.state, "metrics", None)
+    if metrics is None:
+        metrics = request.app.state.metrics = MetricsRegistry()
+    return metrics
 
 
 def _require_install_token(token: str, settings: Settings) -> None:
@@ -289,6 +345,21 @@ async def health(request: Request, api: ApiClient):
         }
     except AmuleApiError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics(request: Request):
+    settings = _settings(request)
+    if settings.metrics_token is None:
+        raise HTTPException(status_code=404)
+    authorization = request.headers.get("Authorization")
+    expected = f"Bearer {settings.metrics_token.get_secret_value()}"
+    if authorization is None or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=404)
+    return PlainTextResponse(
+        _metrics(request).render_prometheus(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get("/")

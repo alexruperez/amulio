@@ -150,6 +150,14 @@ to aMulio over the private Docker network. Set `CADDY_DOMAIN` to a DNS name
 that already resolves to the host and use its `https://` URL as
 `AMULIO_PUBLIC_URL`; aMulio, aMule EC and amuleapi do not expose public ports.
 
+### Metrics and logs
+
+aMulio writes JSON request logs to standard output without installation or
+playback tokens. The Prometheus-compatible `/metrics` endpoint is disabled by
+default. To enable it for a private scraper, set `AMULIO_METRICS_TOKEN` and
+send `Authorization: Bearer <token>`; keep that scraper on the private Docker
+network or protect it separately at the proxy.
+
 ## Security and privacy
 
 - Never expose the aMule EC port or `amuleapi` HTTP port to the Internet.

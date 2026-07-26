@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     public_url: AnyHttpUrl = "http://127.0.0.1:8000"
     install_token: SecretStr = Field(min_length=24)
     token_secret: SecretStr = Field(min_length=32)
+    metrics_token: SecretStr | None = Field(default=None, min_length=24)
     allowed_media_roots: str = "/data/incoming"
     database_path: str = "data/amulio.sqlite3"
     amule_api_base_url: AnyHttpUrl = Field(

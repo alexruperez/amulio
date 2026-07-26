@@ -160,7 +160,7 @@ Compose and receives an authenticated `/health` response from aMulio.
 ## Phase 5 — Production operations
 
 - [x] Add Caddy with automatic HTTPS and no direct public aMule/amuleapi ports.
-- [ ] Add structured logs, Prometheus metrics and a minimal `/metrics` policy.
+- [x] Add structured logs, Prometheus metrics and a minimal `/metrics` policy.
 - [ ] Add backup/restore instructions for configuration and cache; do not back
   up transient downloads by default.
 - [ ] Add GitHub Actions for Ruff, tests, Docker build and image security scan.
