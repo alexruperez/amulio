@@ -128,8 +128,8 @@ Stremio displays a purposeful status video rather than a playback error.
 
 - [x] Test traversal, encoded traversal, symlink escape and non-regular files.
 - [x] Ensure every token has an expiry and cannot select an arbitrary path.
-- [ ] Verify the container only mounts approved Incoming roots as read-only.
-- [ ] Rate-limit manifest, stream and playback routes by installation token and
+- [x] Verify the container only mounts approved Incoming roots as read-only.
+- [x] Rate-limit manifest, stream and playback routes by installation token and
   client IP.
 
 **Acceptance:** the integration suite proves correct `206`/`416` behavior and

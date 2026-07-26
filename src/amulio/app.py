@@ -15,6 +15,7 @@ from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.ranking import rank_results
+from amulio.rate_limit import SlidingWindowRateLimiter
 from amulio.search_locks import MediaSearchLocks
 from amulio.status_videos import status_video
 from amulio.tokens import InvalidToken, sign, verify
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):
     app.state.search_locks = MediaSearchLocks()
     app.state.download_locks = MediaSearchLocks()
     app.state.monitor_health = MonitorHealth()
+    app.state.rate_limiter = SlidingWindowRateLimiter()
     app.state.event_monitor = asyncio.create_task(
         monitor_events(app.state.amule_api, app.state.cache, health=app.state.monitor_health),
         name="amulio-amuleapi-events",
@@ -94,6 +96,18 @@ def _settings(request: Request) -> Settings:
 def _require_install_token(token: str, settings: Settings) -> None:
     if token != settings.install_token.get_secret_value():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
+async def _enforce_rate_limit(
+    request: Request, *, route: str, subject: str, limit: int, settings: Settings
+) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"{route}:{subject}:{client_ip}"
+    limiter = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None:
+        limiter = request.app.state.rate_limiter = SlidingWindowRateLimiter()
+    if not await limiter.allow(key, limit=limit, window_seconds=settings.rate_limit_window_seconds):
+        raise HTTPException(status_code=429, detail="Too many requests")
 
 
 def _state_marker(state: str | None) -> str:
@@ -297,6 +311,13 @@ async def configure(request: Request):
 async def manifest(installation_token: str, request: Request):
     settings = _settings(request)
     _require_install_token(installation_token, settings)
+    await _enforce_rate_limit(
+        request,
+        route="manifest",
+        subject=installation_token,
+        limit=settings.manifest_rate_limit,
+        settings=settings,
+    )
     return {
         "id": "com.alexruperez.amulio",
         "version": "0.1.0",
@@ -323,6 +344,13 @@ async def streams(
 ):
     settings = _settings(request)
     _require_install_token(installation_token, settings)
+    await _enforce_rate_limit(
+        request,
+        route="stream",
+        subject=installation_token,
+        limit=settings.stream_rate_limit,
+        settings=settings,
+    )
     response.headers["Cache-Control"] = "no-store"
     if media_type not in {"movie", "series"} or not media_id.startswith("tt"):
         return {"streams": []}
@@ -346,6 +374,13 @@ async def streams(
 @app.get("/play/{token}")
 async def play(token: str, request: Request, api: ApiClient, cache: Cache):
     settings = _settings(request)
+    await _enforce_rate_limit(
+        request,
+        route="playback",
+        subject=token,
+        limit=settings.playback_rate_limit,
+        settings=settings,
+    )
     try:
         candidate = Candidate.model_validate(
             verify(token, secret=settings.token_secret.get_secret_value())["candidate"]
@@ -376,6 +411,13 @@ async def play(token: str, request: Request, api: ApiClient, cache: Cache):
 @app.api_route("/file/{token}", methods=["GET", "HEAD"])
 async def file(token: str, request: Request, api: ApiClient):
     settings = _settings(request)
+    await _enforce_rate_limit(
+        request,
+        route="playback",
+        subject=token,
+        limit=settings.playback_rate_limit,
+        settings=settings,
+    )
     try:
         candidate = Candidate.model_validate(
             verify(token, secret=settings.token_secret.get_secret_value())["candidate"]
