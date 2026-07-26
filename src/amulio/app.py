@@ -396,13 +396,17 @@ async def _discover_candidates(
     )
     cached = cache.get(media_key)
     if cached is not None:
-        return cached
+        if _cached_candidates_are_available(cached):
+            return cached
+        cache.delete(media_key)
 
     async with search_locks.acquire(media_key):
         # A request that waited for an identical search should reuse its result.
         cached = cache.get(media_key)
         if cached is not None:
-            return cached
+            if _cached_candidates_are_available(cached):
+                return cached
+            cache.delete(media_key)
 
         search_ids: tuple[int, ...] = ()
         try:
@@ -496,6 +500,14 @@ def _e2e_fixture_candidate(media_type: str, media_id: str, settings: Settings) -
         sources_complete=1,
         release_group="E2E",
         score=10_000,
+    )
+
+
+def _cached_candidates_are_available(candidates: list[Candidate]) -> bool:
+    """Do not serve expired local file paths from the persistent stream cache."""
+    return all(
+        candidate.local_path is None or Path(candidate.local_path).is_file()
+        for candidate in candidates
     )
 
 

@@ -4,7 +4,7 @@ from amulio.app import _discover_candidates
 from amulio.cache import CandidateCache
 from amulio.config import Settings
 from amulio.metadata import MediaMetadata
-from amulio.models import AmuleSearchResult
+from amulio.models import AmuleSearchResult, Candidate
 from amulio.search_locks import MediaSearchLocks
 
 
@@ -89,6 +89,75 @@ async def test_concurrent_discovery_starts_each_amule_search_once(tmp_path):
     assert metadata.calls == 1
     assert all(result == results[0] for result in results)
     assert locks.active_keys == 0
+
+
+async def test_discovery_discards_a_cached_local_file_that_was_removed(tmp_path):
+    class FakeMetadata:
+        calls = 0
+
+        async def resolve(self, media_type: str, media_id: str) -> MediaMetadata:
+            self.calls += 1
+            return MediaMetadata(title="Example Film", year=2026)
+
+    class FakeApi:
+        started = 0
+
+        async def start_search(self, query: str, *, kind: str) -> int:
+            self.started += 1
+            return self.started
+
+        async def search_results(self, search_id: int) -> list[AmuleSearchResult]:
+            return [
+                AmuleSearchResult(
+                    hash="b" * 32,
+                    name="Example.Film.2026.mkv",
+                    size=2_000_000_000,
+                    sources={"total": 1},
+                )
+            ]
+
+        async def stop_search(self, search_id: int, *, close: bool) -> None:
+            return None
+
+    cache = CandidateCache(str(tmp_path / "cache.sqlite3"))
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+        search_wait_seconds=0,
+    )
+    missing_file = tmp_path / "removed.mp4"
+    cache.put(
+        "movie:tt1234567:default",
+        [
+            Candidate(
+                hash="a" * 32,
+                name="Example.Film.2026.mp4",
+                size=123,
+                ed2k_link="ed2k://|file|Example.Film.2026.mp4|123|" + "a" * 32 + "|/",
+                local_path=str(missing_file),
+            )
+        ],
+        ttl_seconds=60,
+    )
+    metadata = FakeMetadata()
+    api = FakeApi()
+    try:
+        results = await _discover_candidates(
+            media_type="movie",
+            media_id="tt1234567",
+            api=api,  # type: ignore[arg-type]
+            metadata=metadata,  # type: ignore[arg-type]
+            cache=cache,
+            settings=settings,
+            search_locks=MediaSearchLocks(),
+        )
+    finally:
+        cache.close()
+
+    assert metadata.calls == 1
+    assert api.started == 2
+    assert [candidate.hash for candidate in results] == ["b" * 32]
 
 
 async def test_different_media_keys_can_search_concurrently():

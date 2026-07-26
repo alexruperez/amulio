@@ -85,6 +85,11 @@ class CandidateCache:
         )
         self._connection.commit()
 
+    def delete(self, media_key: str) -> None:
+        """Discard a cached stream listing that is no longer valid."""
+        self._connection.execute("DELETE FROM stream_cache WHERE media_key = ?", (media_key,))
+        self._connection.commit()
+
     def set_file_state(
         self,
         file_hash: str,
