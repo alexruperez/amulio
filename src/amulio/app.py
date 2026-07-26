@@ -9,13 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from amulio.amule_api import AmuleApiClient, AmuleApiError
-from amulio.cache import CandidateCache
+from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings, get_settings
 from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.ranking import rank_results
 from amulio.search_locks import MediaSearchLocks
+from amulio.status_videos import status_video
 from amulio.tokens import InvalidToken, sign, verify
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.cache = CandidateCache(settings.database_path)
     app.state.search_locks = MediaSearchLocks()
+    app.state.download_locks = MediaSearchLocks()
     app.state.monitor_health = MonitorHealth()
     app.state.event_monitor = asyncio.create_task(
         monitor_events(app.state.amule_api, app.state.cache, health=app.state.monitor_health),
@@ -102,7 +104,22 @@ def _state_marker(state: str | None) -> str:
     return "🧲"
 
 
-def _stream_object(candidate: Candidate, request: Request, *, state: str | None = None) -> dict:
+def _download_details(file_state: FileState | None) -> str:
+    if file_state is None or file_state.state != "downloading":
+        return ""
+    details: list[str] = []
+    if file_state.percent is not None:
+        details.append(f"⬇️ {file_state.percent:.1f}%")
+    if file_state.speed_bps:
+        details.append(f"⚡ {file_state.speed_bps / 1_000_000:.2f} MB/s")
+    if file_state.sources_total is not None:
+        details.append(f"👥 {file_state.sources_total} fuentes activas")
+    return f"\n{' · '.join(details)}" if details else "\n⬇️ Descargando en aMule"
+
+
+def _stream_object(
+    candidate: Candidate, request: Request, *, file_state: FileState | None = None
+) -> dict:
     settings = _settings(request)
     token = sign(
         {"candidate": candidate.model_dump()},
@@ -110,12 +127,16 @@ def _stream_object(candidate: Candidate, request: Request, *, state: str | None 
         ttl_seconds=settings.candidate_ttl_seconds,
     )
     return {
-        "name": f"{_state_marker(state)} aMulio · {candidate.quality or 'video'}",
+        "name": (
+            f"{_state_marker(file_state.state if file_state else None)} aMulio · "
+            f"{candidate.quality or 'video'}"
+        ),
         "description": (
             f"{candidate.name}\n"
             f"💾 {candidate.size / 1_000_000_000:.2f} GB · "
             f"👥 {candidate.sources_total} fuentes "
             f"({candidate.sources_complete} completas)"
+            f"{_download_details(file_state)}"
         ),
         "url": f"{str(settings.public_url).rstrip('/')}/play/{token}",
         "behaviorHints": {
@@ -128,10 +149,10 @@ def _stream_object(candidate: Candidate, request: Request, *, state: str | None 
 
 
 def _stream_response(candidates: list[Candidate], request: Request, cache: CandidateCache) -> dict:
-    states = cache.file_states([candidate.hash for candidate in candidates])
+    states = cache.file_state_details([candidate.hash for candidate in candidates])
     return {
         "streams": [
-            _stream_object(candidate, request, state=states.get(candidate.hash))
+            _stream_object(candidate, request, file_state=states.get(candidate.hash))
             for candidate in candidates
         ]
     }
@@ -152,6 +173,19 @@ async def _resolve_completed_file(candidate: Candidate, api: AmuleApiClient):
     if shared:
         return shared
     return await api.completed_download(candidate.hash)
+
+
+async def _queue_or_resolve_download(candidate: Candidate, api: AmuleApiClient):
+    shared = await api.shared_file(candidate.hash)
+    if shared:
+        return shared, False
+    existing_download = await api.download(candidate.hash)
+    if existing_download and existing_download.status == "completed":
+        return existing_download, False
+    if existing_download is None:
+        await api.add_download(candidate.ed2k_link)
+        return None, True
+    return None, False
 
 
 async def _discover_candidates(
@@ -307,7 +341,7 @@ async def streams(
 
 
 @app.get("/play/{token}")
-async def play(token: str, request: Request, api: ApiClient):
+async def play(token: str, request: Request, api: ApiClient, cache: Cache):
     settings = _settings(request)
     try:
         candidate = Candidate.model_validate(
@@ -316,16 +350,23 @@ async def play(token: str, request: Request, api: ApiClient):
     except (InvalidToken, KeyError):
         raise HTTPException(status_code=404) from None
 
+    queued = False
     try:
-        if await _resolve_completed_file(candidate, api):
-            return RedirectResponse(f"/file/{token}", status_code=307)
-        await api.add_download(candidate.ed2k_link)
+        async with request.app.state.download_locks.acquire(f"download:{candidate.hash}"):
+            completed, queued = await _queue_or_resolve_download(candidate, api)
+            if completed:
+                return RedirectResponse(f"/file/{token}", status_code=307)
+            if queued:
+                cache.set_file_state(candidate.hash, "downloading", status="queued")
     except AmuleApiError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning("aMule is unavailable while playing %s: %s", candidate.hash, exc)
+        return status_video("unavailable")
 
-    raise HTTPException(
-        status_code=202,
-        detail="Download queued in aMule. Retry this stream once the file is complete.",
+    if queued:
+        return status_video("started")
+    file_state = cache.file_state(candidate.hash)
+    return status_video(
+        "downloading" if file_state and file_state.state == "downloading" else "started"
     )
 
 

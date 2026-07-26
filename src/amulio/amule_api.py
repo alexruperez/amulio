@@ -90,6 +90,16 @@ class AmuleApiClient:
     async def add_download(self, ed2k_link: str) -> None:
         await self._request("POST", "downloads", json={"ed2k_link": ed2k_link})
 
+    async def download(self, file_hash: str) -> AmuleFile | None:
+        response = await self._client.get(
+            f"downloads/{file_hash}", headers={"Authorization": f"Bearer {await self._login()}"}
+        )
+        if response.status_code == 404:
+            return None
+        if response.is_error:
+            raise AmuleApiError(f"amuleapi download lookup failed ({response.status_code})")
+        return AmuleFile.model_validate(response.json())
+
     async def shared_file(self, file_hash: str) -> AmuleFile | None:
         response = await self._client.get(
             f"shared/{file_hash}", headers={"Authorization": f"Bearer {await self._login()}"}
@@ -102,14 +112,9 @@ class AmuleApiClient:
         return None if result.path == "[PartFile]" else result
 
     async def completed_download(self, file_hash: str) -> AmuleFile | None:
-        response = await self._client.get(
-            f"downloads/{file_hash}", headers={"Authorization": f"Bearer {await self._login()}"}
-        )
-        if response.status_code == 404:
+        result = await self.download(file_hash)
+        if result is None:
             return None
-        if response.is_error:
-            raise AmuleApiError(f"amuleapi download lookup failed ({response.status_code})")
-        result = AmuleFile.model_validate(response.json())
         return result if result.status == "completed" else None
 
     async def events(

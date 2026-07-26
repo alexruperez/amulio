@@ -26,6 +26,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/amulio"]
+include = ["src/amulio/assets/*.mp4"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

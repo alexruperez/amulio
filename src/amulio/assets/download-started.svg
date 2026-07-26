@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#17324d"/>
+  <circle cx="640" cy="245" r="72" fill="#4fb3d8"/>
+  <path d="M640 200v90m-35-35 35 35 35-35" stroke="#17324d" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="640" y="405" text-anchor="middle" fill="white" font-family="Verdana, sans-serif" font-size="54" font-weight="bold">aMulio</text>
+  <text x="640" y="475" text-anchor="middle" fill="#d6e9f2" font-family="Verdana, sans-serif" font-size="34">Descarga iniciada en aMule</text>
+  <text x="640" y="535" text-anchor="middle" fill="#b6cfdd" font-family="Verdana, sans-serif" font-size="25">Vuelve a abrir este stream cuando termine.</text>
+</svg>

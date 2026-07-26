@@ -32,7 +32,7 @@ later, opt-in experiment.
 | Signed playback URLs | Done | Credentials are never exposed to Stremio. |
 | Completed-file playback | Done in code | Requires a real aMule/amuleapi instance and shared Incoming mount for integration validation. |
 | Download/shared SSE subscription | Done | Snapshot-then-stream reconciliation, `resync` recovery and monitor health are persisted. |
-| Downloading-state player UX | Not started | A selected unfinished stream currently returns HTTP 202; it needs a Stremio-friendly status video. |
+| Downloading-state player UX | Done | Bundled status videos, live stream metadata and idempotent enqueueing. |
 | Reproducible aMule 3.1 image | Not started | Compose currently expects a supplied `AMULE_API_IMAGE`. |
 | Production Caddy deployment | Not started | Local Compose only. |
 
@@ -96,13 +96,13 @@ process restart.
 
 ### 2.2 Implement the Stremio downloading experience
 
-- [ ] Add a small bundled, self-produced status video for “download started”,
+- [x] Add a small bundled, self-produced status video for “download started”,
   “still downloading” and “aMule unavailable”.
-- [ ] Make `/play/{token}` return that media response instead of a raw HTTP
+- [x] Make `/play/{token}` return that media response instead of a raw HTTP
   202 when the file is not complete.
-- [ ] Include percentage, speed and source count in the stream description on
+- [x] Include percentage, speed and source count in the stream description on
   the next Stremio refresh.
-- [ ] Make enqueueing idempotent by checking the file hash before submitting
+- [x] Make enqueueing idempotent by checking the file hash before submitting
   an eD2K link again.
 
 **Acceptance:** selecting a new candidate starts exactly one aMule download and
@@ -186,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 2.2: the Stremio downloading experience**. Download
-state now reconciles through SSE plus REST snapshots and remains observable in
-`/health`.
+Continue with **Phase 3.1: completed-file integration fixtures**. The Stremio
+flow now gives purposeful feedback while aMule downloads and queues a selected
+hash only once.
 
 Before changing behavior, run:
 

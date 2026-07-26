@@ -135,3 +135,16 @@ class CandidateCache:
             (file_hash.lower(),),
         ).fetchone()
         return FileState(*row) if row is not None else None
+
+    def file_state_details(self, file_hashes: list[str]) -> dict[str, FileState]:
+        if not file_hashes:
+            return {}
+        placeholders = ",".join("?" for _ in file_hashes)
+        rows = self._connection.execute(
+            f"""
+            SELECT file_hash, state, status, percent, speed_bps, sources_total, updated_at
+            FROM file_state WHERE file_hash IN ({placeholders})
+            """,
+            [file_hash.lower() for file_hash in file_hashes],
+        ).fetchall()
+        return {file_hash: FileState(*state) for file_hash, *state in rows}
