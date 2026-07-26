@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -151,3 +152,89 @@ async def test_playback_seeking_switches_from_status_video_to_completed_file(
     assert after_completion.status_code == 206
     assert after_completion.headers["content-range"] == "bytes 2-5/10"
     assert after_completion.content == b"2345"
+
+
+@pytest.mark.asyncio
+async def test_completed_file_serves_simultaneous_clients(completed_media):
+    candidate, settings = completed_media
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        responses = await asyncio.gather(
+            *(
+                client.get(f"/file/{_token(candidate, settings)}", headers={"Range": "bytes=2-5"})
+                for _ in range(4)
+            )
+        )
+
+    assert [response.status_code for response in responses] == [206] * 4
+    assert [response.content for response in responses] == [b"2345"] * 4
+
+
+@pytest.mark.asyncio
+async def test_cancelling_one_playback_request_does_not_break_the_next(completed_media):
+    candidate, settings = completed_media
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class FakeApi:
+        block = True
+
+        async def shared_file(self, file_hash: str) -> AmuleFile:
+            assert file_hash == candidate.hash
+            if self.block:
+                entered.set()
+                await release.wait()
+            return AmuleFile(
+                hash=candidate.hash,
+                name=candidate.name,
+                size=candidate.size,
+                path=str(Path(settings.media_roots[0])),
+            )
+
+        async def completed_download(self, file_hash: str) -> AmuleFile | None:
+            return None
+
+    app.state.settings = settings
+    app.state.amule_api = FakeApi()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        cancelled = asyncio.create_task(client.get(f"/file/{_token(candidate, settings)}"))
+        await entered.wait()
+        cancelled.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await cancelled
+
+        app.state.amule_api.block = False
+        release.set()
+        response = await client.get(f"/file/{_token(candidate, settings)}")
+
+    assert response.status_code == 200
+    assert response.content == b"0123456789"
+
+
+@pytest.mark.asyncio
+async def test_disappearing_completed_file_returns_not_found(completed_media):
+    candidate, settings = completed_media
+    media_path = Path(settings.media_roots[0]) / candidate.name
+
+    class FakeApi:
+        async def shared_file(self, file_hash: str) -> AmuleFile:
+            assert file_hash == candidate.hash
+            media_path.unlink()
+            return AmuleFile(
+                hash=candidate.hash,
+                name=candidate.name,
+                size=candidate.size,
+                path=str(media_path.parent),
+            )
+
+        async def completed_download(self, file_hash: str) -> AmuleFile | None:
+            return None
+
+    app.state.settings = settings
+    app.state.amule_api = FakeApi()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/file/{_token(candidate, settings)}")
+
+    assert response.status_code == 404

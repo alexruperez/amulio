@@ -120,7 +120,7 @@ Stremio displays a purposeful status video rather than a playback error.
 
 - [x] Test `GET`, `HEAD`, single ranges, suffix ranges and invalid ranges.
 - [x] Test seeking before/after aMule completion acknowledgement.
-- [ ] Test cancellation, simultaneous clients and a file disappearing during a
+- [x] Test cancellation, simultaneous clients and a file disappearing during a
   request.
 - [x] Pin Starlette to a patched release with Range support.
 

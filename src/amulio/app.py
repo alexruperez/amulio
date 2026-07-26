@@ -159,7 +159,10 @@ def _stream_response(candidates: list[Candidate], request: Request, cache: Candi
 
 
 def _safe_media_path(file_path: str, *, settings: Settings) -> Path:
-    resolved_path = Path(file_path).resolve(strict=True)
+    try:
+        resolved_path = Path(file_path).resolve(strict=True)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="The aMule media file is unavailable") from None
     if not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="The aMule media file is unavailable")
     roots = [Path(root).resolve(strict=True) for root in settings.media_roots]
