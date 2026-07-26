@@ -27,7 +27,10 @@ Source and licence: [Wikimedia Commons — Big Buck Bunny small.ogv](https://com
 
 Keep the seed separate from the aMulio downloader. It needs its own aMule
 configuration, Temp and Incoming volumes, its own EC/amuleapi passwords, and
-different peer ports. `docker/amuleapi/entrypoint.sh` supports these overrides:
+different peer ports. A real transfer also requires a different public IP:
+eD2K clients reject a source that resolves to their own public address, even
+when the peer ports differ. Run the seed on a second host for Phase 7.2.
+`docker/amuleapi/entrypoint.sh` supports these overrides:
 
 ```text
 AMULE_TCP_PORT=4663
