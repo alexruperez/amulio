@@ -30,17 +30,17 @@ if [[ ! -f "$CONFIG_DIR/amule.conf" ]]; then
 fi
 
 EC_PASSWORD_MD5=$(printf '%s' "$EC_PASSWORD" | md5sum | cut -d' ' -f1 | tr 'a-f' 'A-F')
-gosu amule python3 - "$CONFIG_DIR/amule.conf" "$EC_PASSWORD_MD5" <<'PY'
+gosu amule python3 - "$CONFIG_DIR/amule.conf" "$EC_PASSWORD_MD5" "$TCP_PORT" "$UDP_PORT" "$EC_PORT" <<'PY'
 import re
 import sys
 
-path, password = sys.argv[1:]
+path, password, tcp_port, udp_port, ec_port = sys.argv[1:]
 content = open(path).read()
 for key, value in (
     ("AcceptExternalConnections", "1"),
-    ("TCPPort", "${TCP_PORT}"),
-    ("UDPPort", "${UDP_PORT}"),
-    ("ECPort", "${EC_PORT}"),
+    ("TCPPort", tcp_port),
+    ("UDPPort", udp_port),
+    ("ECPort", ec_port),
     ("ECPassword", password),
     ("IncomingDir", "/data/incoming"),
     ("TempDir", "/data/temp"),
@@ -55,14 +55,14 @@ PY
 gosu amule amuleapi --config-dir="$CONFIG_DIR" --set-admin-pass="$ADMIN_PASSWORD"
 timeout 3 gosu amule amuleapi --config-dir="$CONFIG_DIR" --password="$EC_PASSWORD" \
     --port="$EC_PORT" --http-port="$API_HTTP_PORT" >/dev/null 2>&1 || true
-gosu amule python3 - "$CONFIG_DIR/amuleapi.conf" <<'PY'
+gosu amule python3 - "$CONFIG_DIR/amuleapi.conf" "$API_HTTP_PORT" <<'PY'
 import re
 import sys
 
-path = sys.argv[1]
+path, api_http_port = sys.argv[1:]
 content = open(path).read()
 content = re.sub(r"^BindAddress=.*$", "BindAddress=0.0.0.0", content, flags=re.MULTILINE)
-content = re.sub(r"^Port=.*$", "Port=${API_HTTP_PORT}", content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^Port=.*$", f"Port={api_http_port}", content, count=1, flags=re.MULTILINE)
 open(path, "w").write(content)
 PY
 chown amule:amule "$CONFIG_DIR/amule.conf" "$CONFIG_DIR/amuleapi.conf"
