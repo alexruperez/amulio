@@ -42,3 +42,18 @@ def test_profiles_can_be_updated_and_revoked(tmp_path):
         assert reopened.revoke(profile.id) is False
     finally:
         reopened.close()
+
+
+def test_rotating_a_profile_preserves_preferences_and_revokes_the_old_id(tmp_path):
+    store = ProfileStore(str(tmp_path / "amulio.sqlite3"))
+    try:
+        original = store.create(ProfilePreferences(ui_language="es", result_limit=20))
+        replacement = store.rotate(original.id)
+        old_profile = store.get(original.id)
+    finally:
+        store.close()
+
+    assert replacement is not None
+    assert replacement.id != original.id
+    assert replacement.preferences == original.preferences
+    assert old_profile is None

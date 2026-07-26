@@ -118,3 +118,39 @@ class ProfileStore:
         )
         self._connection.commit()
         return cursor.rowcount == 1
+
+    def rotate(self, profile_id: str) -> AddonProfile | None:
+        """Create a replacement profile and atomically revoke the old one."""
+        profile = self.get(profile_id)
+        if profile is None:
+            return None
+        replacement = AddonProfile(
+            id=secrets.token_urlsafe(24),
+            preferences=profile.preferences,
+            created_at=int(time.time()),
+            updated_at=int(time.time()),
+        )
+        with self._connection:
+            cursor = self._connection.execute(
+                """
+                UPDATE addon_profile
+                SET revoked_at = ?
+                WHERE profile_id = ? AND revoked_at IS NULL
+                """,
+                (replacement.created_at, profile_id),
+            )
+            if cursor.rowcount != 1:
+                return None
+            self._connection.execute(
+                """
+                INSERT INTO addon_profile (profile_id, preferences_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    replacement.id,
+                    replacement.preferences.model_dump_json(),
+                    replacement.created_at,
+                    replacement.updated_at,
+                ),
+            )
+        return replacement

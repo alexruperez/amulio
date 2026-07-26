@@ -133,6 +133,15 @@ uv run uvicorn amulio.app:app --reload
 Open `http://127.0.0.1:8000/configure` to obtain the private manifest URL for
 Stremio.
 
+### Optional profile administration
+
+The Stremio manifest URL is deliberately a read-only capability: it cannot
+change aMulio preferences or access aMule credentials. To enable the separate
+administrator API, set a high-entropy `AMULIO_ADMIN_PASSWORD` in your private
+environment. It creates short-lived `HttpOnly`, `SameSite=Strict` sessions and
+requires a CSRF token for every profile mutation. Do not reuse the manifest
+token or the aMule EC password for this value.
+
 The supplied `compose.yaml` builds the pinned `amuled` + `amuleapi` image
 locally. Before starting it, create two files outside Git with high-entropy
 passwords and point the matching variables in `.env` at them:

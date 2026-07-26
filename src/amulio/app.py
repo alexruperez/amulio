@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, SecretStr
 
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
@@ -24,7 +25,7 @@ from amulio.local_media import discover_local_media
 from amulio.metadata import CinemetaClient, MetadataError
 from amulio.models import Candidate
 from amulio.observability import MetricsRegistry, configure_logging
-from amulio.profiles import ProfileStore
+from amulio.profiles import AddonProfile, ProfilePreferences, ProfileStore
 from amulio.ranking import rank_results
 from amulio.rate_limit import SlidingWindowRateLimiter
 from amulio.search_locks import MediaSearchLocks
@@ -60,6 +61,13 @@ def _get_search_locks(request: Request) -> MediaSearchLocks:
 
 
 SearchLocks = Annotated[MediaSearchLocks, Depends(_get_search_locks)]
+
+
+def _get_profile_store(request: Request) -> ProfileStore:
+    return request.app.state.profile_store
+
+
+Profiles = Annotated[ProfileStore, Depends(_get_profile_store)]
 
 
 @asynccontextmanager
@@ -118,6 +126,8 @@ def _observability_route(path: str) -> str:
         return "/{installation_token}/stream/{media_type}/{media_id}.json"
     if path.startswith("/assets/"):
         return "/assets/{asset}"
+    if path.startswith("/admin/"):
+        return "/admin/{route}"
     return path if path in {"/", "/configure", "/health", "/metrics"} else "/unknown"
 
 
@@ -167,6 +177,28 @@ def _metrics(request: Request) -> MetricsRegistry:
 def _require_install_token(token: str, settings: Settings) -> None:
     if token != settings.install_token.get_secret_value():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
+def _require_admin_session(request: Request) -> dict:
+    """Return a verified admin session without accepting Stremio capabilities."""
+    settings = _settings(request)
+    session_token = request.cookies.get("amulio_admin")
+    if settings.admin_password is None or session_token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    try:
+        payload = verify(session_token, secret=settings.token_secret.get_secret_value())
+    except InvalidToken as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) from exc
+    if payload.get("scope") != "admin" or not isinstance(payload.get("csrf"), str):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return payload
+
+
+def _require_csrf(request: Request) -> None:
+    payload = _require_admin_session(request)
+    csrf_token = request.headers.get("X-CSRF-Token")
+    if csrf_token is None or not secrets.compare_digest(csrf_token, payload["csrf"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
 
 
 async def _enforce_rate_limit(
@@ -414,6 +446,105 @@ async def tokenized_configure(installation_token: str, request: Request):
     settings = _settings(request)
     _require_install_token(installation_token, settings)
     return _configuration_page(settings)
+
+
+class AdminLoginRequest(BaseModel):
+    password: SecretStr
+
+
+class AdminSessionResponse(BaseModel):
+    csrf_token: str
+    expires_in_seconds: int
+
+
+@app.post("/admin/session", response_model=AdminSessionResponse)
+async def create_admin_session(
+    credentials: AdminLoginRequest, request: Request, response: Response
+) -> AdminSessionResponse:
+    """Create an HttpOnly administrative session when it is explicitly enabled."""
+    settings = _settings(request)
+    if settings.admin_password is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await _enforce_rate_limit(
+        request,
+        route="admin-login",
+        subject="admin",
+        limit=settings.admin_login_rate_limit,
+        settings=settings,
+    )
+    if not secrets.compare_digest(
+        credentials.password.get_secret_value(), settings.admin_password.get_secret_value()
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    csrf_token = secrets.token_urlsafe(32)
+    session_token = sign(
+        {"scope": "admin", "csrf": csrf_token},
+        secret=settings.token_secret.get_secret_value(),
+        ttl_seconds=settings.admin_session_ttl_seconds,
+    )
+    response.set_cookie(
+        "amulio_admin",
+        session_token,
+        max_age=settings.admin_session_ttl_seconds,
+        httponly=True,
+        secure=str(settings.public_url).startswith("https://"),
+        samesite="strict",
+        path="/admin",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return AdminSessionResponse(
+        csrf_token=csrf_token, expires_in_seconds=settings.admin_session_ttl_seconds
+    )
+
+
+@app.delete("/admin/session", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_session(request: Request, response: Response) -> None:
+    _require_csrf(request)
+    response.delete_cookie("amulio_admin", path="/admin", httponly=True, samesite="strict")
+
+
+@app.post("/admin/profiles", response_model=AddonProfile, status_code=status.HTTP_201_CREATED)
+async def create_profile(
+    request: Request, profiles: Profiles, preferences: ProfilePreferences | None = None
+) -> AddonProfile:
+    _require_csrf(request)
+    return profiles.create(preferences)
+
+
+@app.get("/admin/profiles/{profile_id}", response_model=AddonProfile)
+async def get_profile(profile_id: str, request: Request, profiles: Profiles) -> AddonProfile:
+    _require_admin_session(request)
+    profile = profiles.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return profile
+
+
+@app.put("/admin/profiles/{profile_id}", response_model=AddonProfile)
+async def update_profile(
+    profile_id: str, preferences: ProfilePreferences, request: Request, profiles: Profiles
+) -> AddonProfile:
+    _require_csrf(request)
+    profile = profiles.update(profile_id, preferences)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return profile
+
+
+@app.post("/admin/profiles/{profile_id}/rotate", response_model=AddonProfile)
+async def rotate_profile(profile_id: str, request: Request, profiles: Profiles) -> AddonProfile:
+    _require_csrf(request)
+    profile = profiles.rotate(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return profile
+
+
+@app.delete("/admin/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_profile(profile_id: str, request: Request, profiles: Profiles) -> None:
+    _require_csrf(request)
+    if not profiles.revoke(profile_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
 def _configuration_page(settings: Settings) -> str:

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     public_url: AnyHttpUrl = "http://127.0.0.1:8000"
     install_token: SecretStr = Field(min_length=24)
     token_secret: SecretStr = Field(min_length=32)
+    admin_password: SecretStr | None = Field(
+        default=None, min_length=16, validation_alias="AMULIO_ADMIN_PASSWORD"
+    )
+    admin_session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
     metrics_token: SecretStr | None = Field(default=None, min_length=24)
     allowed_media_roots: str = "/data/incoming"
     database_path: str = "data/amulio.sqlite3"
@@ -43,6 +47,7 @@ class Settings(BaseSettings):
     candidate_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     negative_candidate_ttl_seconds: int = Field(default=120, ge=10, le=3600)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    admin_login_rate_limit: int = Field(default=10, ge=1, le=100)
     manifest_rate_limit: int = Field(default=30, ge=1, le=10_000)
     stream_rate_limit: int = Field(default=30, ge=1, le=10_000)
     playback_rate_limit: int = Field(default=600, ge=1, le=100_000)

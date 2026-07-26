@@ -293,10 +293,10 @@ connector avoids opening an inbound web port on the Home Assistant host.
   languages, quality filters, result limit, maximum size and season packs.
 - [x] Store profiles server-side under random, revocable configuration IDs;
   never put aMule credentials in a manifest URL.
-- [ ] Separate read-only Stremio capabilities from an authenticated
+- [x] Separate read-only Stremio capabilities from an authenticated
   administrator session; possession of a manifest URL must not grant profile
   editing or access to daemon settings.
-- [ ] Add create, read, update, rotate and revoke operations with CSRF
+- [x] Add create, read, update, rotate and revoke operations with CSRF
   protection and bounded validation.
 - [ ] Keep the current instance-level install token migration-compatible.
 
