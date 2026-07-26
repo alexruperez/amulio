@@ -10,6 +10,10 @@ dependencies = [
   "fastapi>=0.115,<1.0",
   "httpx>=0.27,<1.0",
   "pydantic-settings>=2.6,<3.0",
+  # FileResponse range support is part of the Stremio playback contract; keep
+  # the HTTP layer on a patched Starlette release instead of relying only on
+  # FastAPI's transitive constraint.
+  "starlette>=1.3.1,<2.0",
   "uvicorn[standard]>=0.32,<1.0",
 ]
 
