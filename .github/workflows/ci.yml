@@ -56,7 +56,7 @@ jobs:
           tags: amulio:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: amulio:ci
           format: table
@@ -72,7 +72,7 @@ jobs:
           tags: amulio-amuleapi:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: amulio-amuleapi:ci
           format: table
