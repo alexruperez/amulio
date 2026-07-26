@@ -39,6 +39,6 @@ def test_completed_local_video_is_web_ready(tmp_path: Path):
     stream = _stream_object(candidate, type("Request", (), {"app": app})())
 
     assert stream["behaviorHints"]["notWebReady"] is False
-    assert stream["name"] == "✅ aMulio · 720p"
-    assert stream["description"].startswith("Archivo local completado")
+    assert stream["name"] == "✅ aMulio · Ready to play · 720p"
+    assert stream["description"].startswith("Completed local file")
     assert "💾 1.5 MB" in stream["description"]

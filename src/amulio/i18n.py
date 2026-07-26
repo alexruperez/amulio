@@ -47,6 +47,13 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "language": "Language",
         "english": "English",
         "spanish": "Spanish",
+        "stream_ready": "Ready to play",
+        "stream_download": "Download with aMule",
+        "stream_downloading": "Downloading in aMule",
+        "stream_completed": "Completed local file",
+        "stream_sources": "{total} sources ({complete} complete)",
+        "stream_active_sources": "{count} active sources",
+        "stream_quality_fallback": "video",
     },
     "es": {
         "page_title": "Instala aMulio para Stremio",
@@ -90,6 +97,13 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "language": "Idioma",
         "english": "Inglés",
         "spanish": "Español",
+        "stream_ready": "Listo para reproducir",
+        "stream_download": "Descargar con aMule",
+        "stream_downloading": "Descargando en aMule",
+        "stream_completed": "Archivo local completado",
+        "stream_sources": "{total} fuentes ({complete} completas)",
+        "stream_active_sources": "{count} fuentes activas",
+        "stream_quality_fallback": "vídeo",
     },
 }
 

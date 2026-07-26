@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import Request
 
-from amulio.app import _download_details, app, play
+from amulio.app import _download_details, _stream_object, app, play
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings
 from amulio.models import Candidate
@@ -34,7 +34,36 @@ def test_download_details_include_live_metrics():
 
     assert "50.5%" in details
     assert "2.50 MB/s" in details
-    assert "4 fuentes activas" in details
+    assert "4 active sources" in details
+
+
+def test_remote_streams_make_download_intent_and_progress_explicit():
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+    )
+    app.state.settings = settings
+    request = type("Request", (), {"app": app})()
+
+    new_stream = _stream_object(_candidate(), request)
+    downloading_stream = _stream_object(
+        _candidate(),
+        request,
+        file_state=FileState(
+            state="downloading",
+            status="downloading",
+            percent=1.0,
+            speed_bps=None,
+            sources_total=2,
+            updated_at=0,
+        ),
+    )
+
+    assert new_stream["name"] == "🧲 aMulio · Download with aMule · video"
+    assert "🧲 Download with aMule" in new_stream["description"]
+    assert downloading_stream["name"] == "⬇️ aMulio · Downloading in aMule · video"
+    assert "1.0%" in downloading_stream["description"]
 
 
 async def test_play_enqueues_a_new_download_once_and_returns_a_status_video(tmp_path):

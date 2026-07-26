@@ -217,7 +217,7 @@ async def _enforce_rate_limit(
         raise HTTPException(status_code=429, detail="Too many requests")
 
 
-def _state_marker(state: str | None) -> str:
+def _state_marker(state: str) -> str:
     if state == "ready":
         return "✅"
     if state == "downloading":
@@ -225,7 +225,7 @@ def _state_marker(state: str | None) -> str:
     return "🧲"
 
 
-def _download_details(file_state: FileState | None) -> str:
+def _download_details(file_state: FileState | None, *, locale: Locale = "en") -> str:
     if file_state is None or file_state.state != "downloading":
         return ""
     details: list[str] = []
@@ -234,8 +234,12 @@ def _download_details(file_state: FileState | None) -> str:
     if file_state.speed_bps:
         details.append(f"⚡ {file_state.speed_bps / 1_000_000:.2f} MB/s")
     if file_state.sources_total is not None:
-        details.append(f"👥 {file_state.sources_total} fuentes activas")
-    return f"\n{' · '.join(details)}" if details else "\n⬇️ Descargando en aMule"
+        details.append(
+            f"👥 {translate(locale, 'stream_active_sources').format(count=file_state.sources_total)}"
+        )
+    return (
+        f"\n{' · '.join(details)}" if details else f"\n⬇️ {translate(locale, 'stream_downloading')}"
+    )
 
 
 def _format_size(size: int) -> str:
@@ -247,7 +251,11 @@ def _format_size(size: int) -> str:
 
 
 def _stream_object(
-    candidate: Candidate, request: Request, *, file_state: FileState | None = None
+    candidate: Candidate,
+    request: Request,
+    *,
+    file_state: FileState | None = None,
+    locale: Locale = "en",
 ) -> dict:
     settings = _settings(request)
     token = sign(
@@ -256,21 +264,35 @@ def _stream_object(
         ttl_seconds=settings.candidate_ttl_seconds,
     )
     is_local = candidate.local_path is not None
+    stream_state = (
+        "ready"
+        if is_local
+        else "downloading"
+        if file_state is not None and file_state.state == "downloading"
+        else "download"
+    )
+    stream_label = translate(
+        locale,
+        {
+            "ready": "stream_ready",
+            "downloading": "stream_downloading",
+            "download": "stream_download",
+        }[stream_state],
+    )
+    quality = candidate.quality or translate(locale, "stream_quality_fallback")
     if is_local:
-        description = (
-            f"Archivo local completado\n💾 {_format_size(candidate.size)} · {candidate.name}"
-        )
+        description = f"{translate(locale, 'stream_completed')}\n💾 {_format_size(candidate.size)} · {candidate.name}"
     else:
+        language = f" · 🌐 {candidate.language.upper()}" if candidate.language else ""
         description = (
             f"{candidate.name}\n"
-            f"💾 {_format_size(candidate.size)} · "
-            f"👥 {candidate.sources_total} fuentes "
-            f"({candidate.sources_complete} completas)"
-            f"{_download_details(file_state)}"
+            f"🧲 {stream_label}\n"
+            f"💾 {_format_size(candidate.size)} · 👥 "
+            f"{translate(locale, 'stream_sources').format(total=candidate.sources_total, complete=candidate.sources_complete)}"
+            f"{language}{_download_details(file_state, locale=locale)}"
         )
-    stream_state = "ready" if is_local else file_state.state if file_state else None
     return {
-        "name": (f"{_state_marker(stream_state)} aMulio · {candidate.quality or 'video'}"),
+        "name": f"{_state_marker(stream_state)} aMulio · {stream_label} · {quality}",
         "description": description,
         "url": f"{str(settings.public_url).rstrip('/')}/play/{token}",
         "behaviorHints": {

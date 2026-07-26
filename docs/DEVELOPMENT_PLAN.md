@@ -328,7 +328,7 @@ flow.
 
 ### 7.1 Make remote candidates understandable
 
-- [ ] Use distinct **Ready to play**, **Download with aMule** and
+- [x] Use distinct **Ready to play**, **Download with aMule** and
   **Downloading** labels and icons.
 - [ ] Present quality, size, language and sources without implying that a
   remote result is already cached.
