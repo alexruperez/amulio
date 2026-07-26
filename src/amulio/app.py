@@ -367,10 +367,22 @@ async def _discover_candidates(
     cache: CandidateCache,
     settings: Settings,
     search_locks: MediaSearchLocks,
+    preferences: ProfilePreferences | None = None,
+    cache_scope: str = "default",
 ) -> list[Candidate]:
     # Stremio uses tt<id>:<season>:<episode> for episodes, making this key
     # independently serialise every movie and episode lookup.
-    media_key = f"{media_type}:{media_id}"
+    media_key = f"{media_type}:{media_id}:{cache_scope}"
+    preferred_languages = preferences.search_languages if preferences else settings.search_languages
+    allow_season_packs = (
+        preferences.allow_season_packs if preferences else settings.allow_season_packs
+    )
+    result_limit = preferences.result_limit if preferences else 50
+    max_size_bytes = (
+        int(preferences.max_size_gb * 1_000_000_000)
+        if preferences is not None and preferences.max_size_gb is not None
+        else None
+    )
     cached = cache.get(media_key)
     if cached is not None:
         return cached
@@ -385,14 +397,22 @@ async def _discover_candidates(
         try:
             async with asyncio.timeout(settings.search_timeout_seconds):
                 resolved = await metadata.resolve(media_type, media_id)
-                local_candidates = discover_local_media(resolved, settings)
+                local_candidates = discover_local_media(
+                    resolved,
+                    settings,
+                    allow_season_packs=allow_season_packs,
+                    preferred_languages=preferred_languages,
+                )
                 if local_candidates:
+                    local_candidates = _apply_profile_limits(
+                        local_candidates, result_limit=result_limit, max_size_bytes=max_size_bytes
+                    )
                     cache.put(
                         media_key, local_candidates, ttl_seconds=settings.candidate_ttl_seconds
                     )
                     return local_candidates
                 queries = resolved.search_queries(
-                    preferred_languages=settings.search_languages,
+                    preferred_languages=preferred_languages,
                     limit=settings.search_query_limit,
                 )
                 search_ids = tuple(
@@ -423,8 +443,11 @@ async def _discover_candidates(
             resolved,
             allowed_extensions=settings.allowed_extensions,
             denied_extensions=settings.denied_extensions,
-            allow_season_packs=settings.allow_season_packs,
-            preferred_languages=settings.search_languages,
+            allow_season_packs=allow_season_packs,
+            preferred_languages=preferred_languages,
+        )
+        candidates = _apply_profile_limits(
+            candidates, result_limit=result_limit, max_size_bytes=max_size_bytes
         )
         cache.put(
             media_key,
@@ -436,6 +459,14 @@ async def _discover_candidates(
             ),
         )
         return candidates
+
+
+def _apply_profile_limits(
+    candidates: list[Candidate], *, result_limit: int, max_size_bytes: int | None
+) -> list[Candidate]:
+    if max_size_bytes is not None:
+        candidates = [candidate for candidate in candidates if candidate.size <= max_size_bytes]
+    return candidates[:result_limit]
 
 
 @app.get("/health")
@@ -525,6 +556,10 @@ class AdminSessionResponse(BaseModel):
     expires_in_seconds: int
 
 
+class ProfileInstallationResponse(BaseModel):
+    manifest_url: str
+
+
 @app.post("/admin/session", response_model=AdminSessionResponse)
 async def create_admin_session(
     credentials: AdminLoginRequest, request: Request, response: Response
@@ -586,6 +621,19 @@ async def get_profile(profile_id: str, request: Request, profiles: Profiles) -> 
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return profile
+
+
+@app.get("/admin/profiles/{profile_id}/installation", response_model=ProfileInstallationResponse)
+async def profile_installation_url(
+    profile_id: str, request: Request, profiles: Profiles
+) -> ProfileInstallationResponse:
+    _require_admin_session(request)
+    profile = profiles.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return ProfileInstallationResponse(
+        manifest_url=_profile_manifest_url(_settings(request), profile)
+    )
 
 
 @app.put("/admin/profiles/{profile_id}", response_model=AddonProfile)
@@ -771,6 +819,34 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
 </html>"""
 
 
+def _profile_manifest_url(settings: Settings, profile: AddonProfile) -> str:
+    return (
+        f"{str(settings.public_url).rstrip('/')}/{settings.install_token.get_secret_value()}"
+        f"/profile/{profile.id}/manifest.json"
+    )
+
+
+def _manifest(settings: Settings, profile: AddonProfile | None = None) -> dict:
+    suffix = f".profile.{profile.id}" if profile is not None else ""
+    language = profile.preferences.ui_language if profile is not None else "en"
+    return {
+        "id": f"com.alexruperez.amulio{suffix}",
+        "version": "0.1.0",
+        "name": "aMulio",
+        "description": (
+            "Busca contenido eD2K/Kad y reproduce archivos completados de aMule."
+            if language == "es"
+            else "Search eD2K/Kad content and play completed files from aMule."
+        ),
+        "logo": f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png",
+        "catalogs": [],
+        "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],
+        "types": ["movie", "series"],
+        # Profiles are server-side and this manifest has no browser-side options.
+        "behaviorHints": {"p2p": True},
+    }
+
+
 @app.get("/{installation_token}/manifest.json")
 async def manifest(installation_token: str, request: Request):
     settings = _settings(request)
@@ -782,19 +858,26 @@ async def manifest(installation_token: str, request: Request):
         limit=settings.manifest_rate_limit,
         settings=settings,
     )
-    return {
-        "id": "com.alexruperez.amulio",
-        "version": "0.1.0",
-        "name": "aMulio",
-        "description": "Search eD2K/Kad content and play completed files from aMule.",
-        "logo": f"{str(settings.public_url).rstrip('/')}/assets/amule-logo.png",
-        "catalogs": [],
-        "resources": [{"name": "stream", "types": ["movie", "series"], "idPrefixes": ["tt"]}],
-        "types": ["movie", "series"],
-        # This initial release has no per-user options.  Declaring it configurable
-        # would make Stremio route users to ``/<token>/configure`` indefinitely.
-        "behaviorHints": {"p2p": True},
-    }
+    return _manifest(settings)
+
+
+@app.get("/{installation_token}/profile/{profile_id}/manifest.json")
+async def profile_manifest(
+    installation_token: str, profile_id: str, request: Request, profiles: Profiles
+):
+    settings = _settings(request)
+    _require_install_token(installation_token, settings)
+    profile = profiles.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await _enforce_rate_limit(
+        request,
+        route="manifest",
+        subject=f"{installation_token}:{profile.id}",
+        limit=settings.manifest_rate_limit,
+        settings=settings,
+    )
+    return _manifest(settings, profile)
 
 
 @app.get("/{installation_token}/stream/{media_type}/{media_id}.json")
@@ -821,6 +904,73 @@ async def streams(
     response.headers["Cache-Control"] = "no-store"
     if media_type not in {"movie", "series"} or not media_id.startswith("tt"):
         return {"streams": []}
+    return await _stream_listing(
+        media_type=media_type,
+        media_id=media_id,
+        request=request,
+        api=api,
+        metadata=metadata,
+        cache=cache,
+        search_locks=search_locks,
+    )
+
+
+@app.get("/{installation_token}/profile/{profile_id}/stream/{media_type}/{media_id}.json")
+async def profile_streams(
+    installation_token: str,
+    profile_id: str,
+    media_type: str,
+    media_id: str,
+    request: Request,
+    response: Response,
+    api: ApiClient,
+    metadata: MetadataClient,
+    cache: Cache,
+    search_locks: SearchLocks,
+    profiles: Profiles,
+):
+    settings = _settings(request)
+    _require_install_token(installation_token, settings)
+    profile = profiles.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await _enforce_rate_limit(
+        request,
+        route="stream",
+        subject=f"{installation_token}:{profile.id}",
+        limit=settings.stream_rate_limit,
+        settings=settings,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    if media_type not in {"movie", "series"} or not media_id.startswith("tt"):
+        return {"streams": []}
+    return await _stream_listing(
+        media_type=media_type,
+        media_id=media_id,
+        request=request,
+        api=api,
+        metadata=metadata,
+        cache=cache,
+        search_locks=search_locks,
+        preferences=profile.preferences,
+        cache_scope=f"profile:{profile.id}",
+    )
+
+
+async def _stream_listing(
+    *,
+    media_type: str,
+    media_id: str,
+    request: Request,
+    api: ApiClient,
+    metadata: MetadataClient,
+    cache: Cache,
+    search_locks: SearchLocks,
+    preferences: ProfilePreferences | None = None,
+    cache_scope: str = "default",
+) -> dict:
+    settings = _settings(request)
+    locale = preferences.ui_language if preferences is not None else "en"
 
     try:
         candidates = await _discover_candidates(
@@ -831,6 +981,8 @@ async def streams(
             cache=cache,
             settings=settings,
             search_locks=search_locks,
+            preferences=preferences,
+            cache_scope=cache_scope,
         )
     except (AmuleApiError, MetadataError):
         return {
@@ -838,8 +990,8 @@ async def streams(
                 _status_stream(
                     settings,
                     kind="amule-unavailable",
-                    label=translate("en", "stream_unavailable"),
-                    detail=translate("en", "stream_unavailable_detail"),
+                    label=translate(locale, "stream_unavailable"),
+                    detail=translate(locale, "stream_unavailable_detail"),
                 )
             ]
         }
@@ -850,12 +1002,23 @@ async def streams(
                 _status_stream(
                     settings,
                     kind="no-results",
-                    label=translate("en", "stream_no_results"),
-                    detail=translate("en", "stream_no_results_detail"),
+                    label=translate(locale, "stream_no_results"),
+                    detail=translate(locale, "stream_no_results_detail"),
                 )
             ]
         }
-    return _stream_response(candidates, request, cache)
+    states = cache.file_state_details([candidate.hash for candidate in candidates])
+    return {
+        "streams": [
+            _stream_object(
+                candidate,
+                request,
+                file_state=states.get(candidate.hash),
+                locale=locale,
+            )
+            for candidate in candidates
+        ]
+    }
 
 
 @app.get("/play/{token}")

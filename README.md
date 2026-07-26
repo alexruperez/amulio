@@ -142,6 +142,10 @@ environment. It creates short-lived `HttpOnly`, `SameSite=Strict` sessions and
 requires a CSRF token for every profile mutation. Do not reuse the manifest
 token or the aMule EC password for this value.
 
+Each profile has a separate, revocable Stremio manifest URL. Its preferences
+apply to discovery and ranking without exposing aMule credentials. The original
+instance manifest remains available for existing installations.
+
 The supplied `compose.yaml` builds the pinned `amuled` + `amuleapi` image
 locally. Before starting it, create two files outside Git with high-entropy
 passwords and point the matching variables in `.env` at them:

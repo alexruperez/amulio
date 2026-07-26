@@ -7,13 +7,23 @@ from amulio.models import AmuleSearchResult, Candidate
 from amulio.ranking import rank_result
 
 
-def discover_local_media(metadata: MediaMetadata, settings: Settings) -> list[Candidate]:
+def discover_local_media(
+    metadata: MediaMetadata,
+    settings: Settings,
+    *,
+    allow_season_packs: bool | None = None,
+    preferred_languages: tuple[str, ...] | None = None,
+) -> list[Candidate]:
     """Return completed video files in aMule's allowed incoming directories.
 
     Local files are ranked with the same title and episode rules as eD2K search
     results, but retain their real size and can be played without re-queuing.
     """
     candidates: list[Candidate] = []
+    if allow_season_packs is None:
+        allow_season_packs = settings.allow_season_packs
+    if preferred_languages is None:
+        preferred_languages = settings.search_languages
     for root_name in settings.media_roots:
         root = Path(root_name)
         if not root.is_dir():
@@ -40,8 +50,8 @@ def discover_local_media(metadata: MediaMetadata, settings: Settings) -> list[Ca
                 metadata,
                 allowed_extensions=settings.allowed_extensions,
                 denied_extensions=settings.denied_extensions,
-                allow_season_packs=settings.allow_season_packs,
-                preferred_languages=settings.search_languages,
+                allow_season_packs=allow_season_packs,
+                preferred_languages=preferred_languages,
             )
             if ranked is not None:
                 candidates.append(

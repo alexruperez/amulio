@@ -298,7 +298,7 @@ connector avoids opening an inbound web port on the Home Assistant host.
   editing or access to daemon settings.
 - [x] Add create, read, update, rotate and revoke operations with CSRF
   protection and bounded validation.
-- [ ] Keep the current instance-level install token migration-compatible.
+- [x] Keep the current instance-level install token migration-compatible.
 
 ### 6.2 Replace the prototype configuration page
 
