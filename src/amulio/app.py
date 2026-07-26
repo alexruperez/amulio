@@ -208,7 +208,7 @@ def _stream_object(
     is_local = candidate.local_path is not None
     if is_local:
         description = (
-            f"✅ Archivo local completado\n💾 {_format_size(candidate.size)} · {candidate.name}"
+            f"Archivo local completado\n💾 {_format_size(candidate.size)} · {candidate.name}"
         )
     else:
         description = (

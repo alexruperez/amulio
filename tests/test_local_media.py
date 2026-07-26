@@ -40,5 +40,5 @@ def test_completed_local_video_is_web_ready(tmp_path: Path):
 
     assert stream["behaviorHints"]["notWebReady"] is False
     assert stream["name"] == "✅ aMulio · 720p"
-    assert stream["description"].startswith("✅ Archivo local completado")
+    assert stream["description"].startswith("Archivo local completado")
     assert "💾 1.5 MB" in stream["description"]
