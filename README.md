@@ -89,7 +89,7 @@ contains:
 
 - A Stremio-friendly “download started / still downloading” status video.
 - Better aliases, languages, release parsing and ranking rules.
-- Docker image for a pinned aMule 3.1 build with `amuleapi` enabled.
+- Docker image for a pinned aMule development build with `amuleapi` enabled.
 - Experimental progressive playback for `.part` files, behind a feature flag.
 
 Progressive playback is deliberately **not** part of v1. `amuleapi` currently
@@ -103,7 +103,7 @@ The step-by-step implementation roadmap and acceptance gates live in
 ## Requirements
 
 - A running `amuled` connected to eD2K/Kad.
-- `amuleapi` from the aMule 3.1 development branch, built with
+- `amuleapi` from the pinned aMule development commit, built with
   `BUILD_AMULEAPI=ON`.
 - A shared Incoming volume mounted read-only into aMulio at the same path used
   by aMule.

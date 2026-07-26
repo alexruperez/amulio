@@ -130,6 +130,14 @@ Use `git switch main` followed by `git pull --ff-only` when ready to return to
 the current release. Do not use `git reset --hard` on a host that contains local
 deployment changes.
 
+## Updating the pinned aMule build
+
+aMulio deliberately builds aMule from immutable full Git commit IDs, rather
+than following `master` or a mutable tag. At the time this guide was written,
+the latest upstream stable release is `3.0.1`; `3.1` is not yet a published
+release. See [the dedicated aMule upgrade runbook](AMULE_UPGRADES.md) before
+changing `AMULE_REF` or `WX_REF` in `docker/amuleapi/Dockerfile`.
+
 ## Health checks and incident diagnosis
 
 Start with container state and recent logs:

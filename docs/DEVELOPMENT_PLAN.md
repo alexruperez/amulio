@@ -164,7 +164,7 @@ Compose and receives an authenticated `/health` response from aMulio.
 - [x] Add backup/restore instructions for configuration and cache; do not back
   up transient downloads by default.
 - [x] Add GitHub Actions for Ruff, tests, Docker build and image security scan.
-- [ ] Document upgrades from pinned aMule commits to the eventual 3.1 release.
+- [x] Document upgrades from pinned aMule commits to the eventual 3.1 release.
 
 **Acceptance:** the deployment guide covers install, update, rollback, logs,
 backup and incident diagnosis without requiring source-code knowledge.
@@ -186,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 5: production operations** by documenting upgrades from
-pinned aMule commits to the eventual 3.1 release. CI now enforces linting,
-tests, dependency audits, CodeQL and a coverage floor.
+Phase 5 is complete. The next unstarted work is **Phase 6: optional progressive
+playback**, which requires an explicit product decision before implementation.
+CI enforces linting, tests, dependency audits, CodeQL and a coverage floor.
 
 Before changing behavior, run:
 
