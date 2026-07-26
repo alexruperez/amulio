@@ -1,4 +1,4 @@
-from amulio.metadata import MediaMetadata
+from amulio.metadata import MediaMetadata, TitleVariant
 from amulio.models import AmuleSearchResult
 from amulio.ranking import rank_results
 
@@ -33,3 +33,15 @@ def test_rank_results_rejects_archives_and_samples():
     ]
 
     assert rank_results(results, metadata) == []
+
+
+def test_rank_results_accepts_a_configured_title_alias():
+    metadata = MediaMetadata(
+        title="La Película de Ejemplo",
+        year=2026,
+        aliases=(TitleVariant(title="The Example Film", language="en"),),
+    )
+
+    candidates = rank_results([_result("The.Example.Film.2026.1080p.mkv")], metadata)
+
+    assert [candidate.hash for candidate in candidates] == ["a" * 32]

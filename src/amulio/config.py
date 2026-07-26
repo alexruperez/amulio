@@ -26,13 +26,25 @@ class Settings(BaseSettings):
         validation_alias="AMULE_API_ADMIN_PASSWORD",
     )
     cinemeta_base_url: AnyHttpUrl = "https://v3-cinemeta.strem.io/"
+    metadata_cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    preferred_languages: str = "en,es"
+    search_query_limit: int = Field(default=3, ge=1, le=5)
     search_wait_seconds: float = Field(default=1.0, ge=0, le=10)
+    search_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     candidate_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     negative_candidate_ttl_seconds: int = Field(default=120, ge=10, le=3600)
 
     @property
     def media_roots(self) -> tuple[str, ...]:
         return tuple(root.strip() for root in self.allowed_media_roots.split(",") if root.strip())
+
+    @property
+    def search_languages(self) -> tuple[str, ...]:
+        return tuple(
+            language.strip().lower()
+            for language in self.preferred_languages.split(",")
+            if language.strip()
+        )
 
 
 @lru_cache

@@ -54,7 +54,10 @@ async def lifespan(app: FastAPI):
         base_url=str(settings.amule_api_base_url),
         admin_password=settings.amule_api_admin_password.get_secret_value(),
     )
-    app.state.metadata = CinemetaClient(base_url=str(settings.cinemeta_base_url))
+    app.state.metadata = CinemetaClient(
+        base_url=str(settings.cinemeta_base_url),
+        metadata_ttl_seconds=settings.metadata_cache_ttl_seconds,
+    )
     app.state.cache = CandidateCache(settings.database_path)
     app.state.search_locks = MediaSearchLocks()
     app.state.event_monitor = asyncio.create_task(
@@ -170,15 +173,26 @@ async def _discover_candidates(
         if cached is not None:
             return cached
 
-        resolved = await metadata.resolve(media_type, media_id)
-        search_ids = await asyncio.gather(
-            api.start_search(resolved.search_query, kind="global"),
-            api.start_search(resolved.search_query, kind="kad"),
-        )
-        await asyncio.sleep(settings.search_wait_seconds)
-        result_sets = await asyncio.gather(
-            *(api.search_results(search_id) for search_id in search_ids)
-        )
+        try:
+            async with asyncio.timeout(settings.search_timeout_seconds):
+                resolved = await metadata.resolve(media_type, media_id)
+                queries = resolved.search_queries(
+                    preferred_languages=settings.search_languages,
+                    limit=settings.search_query_limit,
+                )
+                search_ids = await asyncio.gather(
+                    *(
+                        api.start_search(query, kind=kind)
+                        for query in queries
+                        for kind in ("global", "kad")
+                    )
+                )
+                await asyncio.sleep(settings.search_wait_seconds)
+                result_sets = await asyncio.gather(
+                    *(api.search_results(search_id) for search_id in search_ids)
+                )
+        except TimeoutError as exc:
+            raise AmuleApiError("aMule search timed out") from exc
         candidates = rank_results(
             [result for result_set in result_sets for result in result_set],
             resolved,

@@ -42,9 +42,16 @@ def rank_result(result: AmuleSearchResult, metadata: MediaMetadata) -> Candidate
     if any(term in normalized_name.split() for term in REJECTED_TERMS):
         return None
 
-    title_tokens = set(_normalize(metadata.title).split())
     name_tokens = set(normalized_name.split())
-    matching_title_tokens = title_tokens & name_tokens
+    title_tokens, matching_title_tokens = max(
+        (
+            (title_tokens, title_tokens & name_tokens)
+            for title in metadata.titles
+            if (title_tokens := set(_normalize(title).split()))
+        ),
+        key=lambda match: len(match[1]),
+        default=(set(), set()),
+    )
     if not title_tokens or len(matching_title_tokens) / len(title_tokens) < 0.8:
         return None
 

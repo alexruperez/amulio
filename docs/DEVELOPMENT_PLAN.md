@@ -56,11 +56,13 @@ at most one global search and one Kad search in aMule.
 
 ### 1.2 Improve metadata and query generation
 
-- [ ] Cache Cinemeta metadata with a TTL.
-- [ ] Add title aliases, original titles and a configurable language preference.
-- [ ] Generate a bounded set of queries: canonical title/year, original title,
+- [x] Cache Cinemeta metadata with a TTL.
+- [x] Add title aliases, original titles and a configurable language preference.
+- [x] Generate a bounded set of queries: canonical title/year, original title,
   and exact `SxxEyy` variants for episodes.
-- [ ] Enforce search timeouts and close stale aMule search sessions.
+- [x] Enforce a bounded timeout for each discovery cycle.
+- [ ] Close stale aMule search sessions after validating the corresponding
+  `amuleapi` operation against the target aMule 3.1 build.
 
 **Acceptance:** test fixtures cover films with translated titles and series
 episodes whose filename uses `S02E04`, `2x04` or equivalent notation.
@@ -184,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 1.2: metadata and query generation**. The completed
-per-media locks remove duplicate network load and provide the concurrency
-primitive that later cache and SSE work will share.
+Finish **Phase 1.2: metadata and query generation** by validating and adding
+remote aMule search-session cleanup. Do not guess the API endpoint: confirm it
+against the pinned aMule 3.1 build first.
 
 Before changing behavior, run:
 
