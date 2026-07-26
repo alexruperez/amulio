@@ -13,6 +13,10 @@ AMULIO_INTEGRATION_URL=http://127.0.0.1:18000 \
 docker compose -f tests/integration/compose.yaml down --volumes
 ```
 
+The test is intentionally skipped by the default `uv run pytest` command:
+building its native aMule fixture is slow and requires a running Docker daemon.
+It is a release-gate integration check, not a unit-test prerequisite.
+
 The test waits for aMule to publish `amulio-fixture.mp4`, obtains its eD2K
 hash via `amuleapi`, signs a temporary aMulio playback URL, and verifies that
 aMulio re-resolves and streams the completed file from the shared read-only
