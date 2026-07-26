@@ -53,3 +53,42 @@ def test_configuration_page_serves_the_amule_logo(monkeypatch):
     assert logo.status_code == 200
     assert logo.headers["content-type"] == "image/png"
     get_settings.cache_clear()
+
+
+def test_configuration_readiness_is_private_and_exposes_only_safe_connection_states(
+    monkeypatch, tmp_path
+):
+    class FakeAmuleApi:
+        async def health(self):
+            return {
+                "ed2k": {"state": "connected"},
+                "kad": {"state": "connecting"},
+                "password": "must-not-be-returned",
+            }
+
+        async def close(self):
+            return None
+
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(tmp_path))
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        app.state.amule_api = FakeAmuleApi()
+        readiness = client.get("/" + "i" * 24 + "/configure/status")
+        rejected = client.get("/wrong/configure/status")
+
+    assert readiness.status_code == 200
+    assert readiness.headers["cache-control"] == "no-store"
+    assert readiness.json() == {
+        "amuleapi": "connected",
+        "ed2k": "connected",
+        "kad": "connecting",
+        "incoming_storage": "ready",
+        "public_url": "configured",
+    }
+    assert "password" not in readiness.text
+    assert rejected.status_code == 404
+    get_settings.cache_clear()

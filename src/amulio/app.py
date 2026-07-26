@@ -4,6 +4,7 @@
 
 import asyncio
 import html
+import json
 import logging
 import secrets
 import time
@@ -122,6 +123,8 @@ def _observability_route(path: str) -> str:
         return "/file/{token}"
     if path.endswith("/manifest.json"):
         return "/{installation_token}/manifest.json"
+    if path.endswith("/configure/status"):
+        return "/{installation_token}/configure/status"
     if "/stream/" in path:
         return "/{installation_token}/stream/{media_type}/{media_id}.json"
     if path.startswith("/assets/"):
@@ -448,6 +451,39 @@ async def tokenized_configure(installation_token: str, request: Request):
     return _configuration_page(settings)
 
 
+def _connection_state(value: object) -> str:
+    if not isinstance(value, dict):
+        return "unknown"
+    state = value.get("state")
+    return state if state in {"connected", "connecting", "disconnected"} else "unknown"
+
+
+@app.get("/{installation_token}/configure/status")
+async def configuration_status(installation_token: str, request: Request, api: ApiClient):
+    """Return non-sensitive readiness data for the private install page."""
+    settings = _settings(request)
+    _require_install_token(installation_token, settings)
+    storage_ready = bool(settings.media_roots) and all(
+        Path(media_root).is_dir() for media_root in settings.media_roots
+    )
+    try:
+        amule_status = await api.health()
+    except AmuleApiError:
+        amule_status = {}
+    response = {
+        "amuleapi": "connected" if amule_status else "unavailable",
+        "ed2k": _connection_state(amule_status.get("ed2k")),
+        "kad": _connection_state(amule_status.get("kad")),
+        "incoming_storage": "ready" if storage_ready else "unavailable",
+        "public_url": "configured",
+    }
+    return Response(
+        content=json.dumps(response),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 class AdminLoginRequest(BaseModel):
     password: SecretStr
 
@@ -556,6 +592,10 @@ def _configuration_page(settings: Settings) -> str:
     stremio_url = html.escape(
         "stremio://" + manifest_url.removeprefix("https://").removeprefix("http://")
     )
+    status_url = html.escape(
+        f"{str(settings.public_url).rstrip('/')}/"
+        f"{settings.install_token.get_secret_value()}/configure/status"
+    )
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -574,6 +614,15 @@ def _configuration_page(settings: Settings) -> str:
       .eyebrow {{ margin: 0 0 .8rem; color: #78d39a; font-size: .75rem; font-weight: 800; letter-spacing: .12em; }}
       h1 {{ max-width: 38rem; margin: 0; color: #fff; font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; }}
       .intro {{ max-width: 40rem; margin: 1.25rem 0 2rem; color: #b9c5d4; font-size: 1.08rem; line-height: 1.65; }}
+      .readiness {{ margin: 0 0 2rem; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .38); }}
+      .readiness h2 {{ margin: 0 0 .8rem; color: #fff; font-size: .9rem; }}
+      .status-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: .55rem; }}
+      .status {{ min-width: 0; padding: .65rem; border-radius: .65rem; background: rgba(255,255,255,.055); }}
+      .status-label {{ display: block; overflow: hidden; color: #9dacbd; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }}
+      .status-value {{ display: block; overflow: hidden; margin-top: .25rem; color: #e3ebf4; font-size: .78rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }}
+      .status[data-state="connected"] .status-value, .status[data-state="ready"] .status-value, .status[data-state="configured"] .status-value {{ color: #8eeaac; }}
+      .status[data-state="connecting"] .status-value {{ color: #f7d978; }}
+      .status[data-state="unavailable"] .status-value, .status[data-state="disconnected"] .status-value {{ color: #f0a0a0; }}
       .features {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin: 0 0 2rem; }}
       .feature {{ min-height: 7.5rem; padding: 1rem; border-radius: 1rem; background: rgba(255,255,255,.055); color: #cbd5e1; font-size: .88rem; line-height: 1.45; }}
       .feature strong {{ display: block; margin-bottom: .3rem; color: #fff; font-size: .92rem; }}
@@ -587,7 +636,7 @@ def _configuration_page(settings: Settings) -> str:
       .hint {{ margin: 1.1rem 0 0; color: #9dacbd; font-size: .86rem; line-height: 1.55; }}
       .hint strong {{ color: #dbe5f0; }}
       footer {{ margin-top: 1.5rem; color: #8190a4; font-size: .78rem; text-align: center; }}
-      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .button {{ width: 100%; }} }}
+      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
     </style>
   </head>
   <body>
@@ -600,6 +649,16 @@ def _configuration_page(settings: Settings) -> str:
         <p class="eyebrow">YOUR PRIVATE STREMIO ADDON</p>
         <h1 id="install-title">Connect Stremio to your aMule library.</h1>
         <p class="intro">Find eD2K and Kad content, queue downloads with aMule, and play completed files from storage you control.</p>
+        <section class="readiness" id="readiness" data-status-url="{status_url}" aria-live="polite" aria-label="Instance readiness">
+          <h2>Instance readiness</h2>
+          <div class="status-grid">
+            <div class="status" data-key="amuleapi"><span class="status-label">amuleapi</span><span class="status-value">Checking…</span></div>
+            <div class="status" data-key="ed2k"><span class="status-label">eD2K</span><span class="status-value">Checking…</span></div>
+            <div class="status" data-key="kad"><span class="status-label">Kad</span><span class="status-value">Checking…</span></div>
+            <div class="status" data-key="incoming_storage"><span class="status-label">Incoming storage</span><span class="status-value">Checking…</span></div>
+            <div class="status" data-key="public_url"><span class="status-label">Public URL</span><span class="status-value">Checking…</span></div>
+          </div>
+        </section>
         <div class="features">
           <div class="feature"><strong>Private by design</strong>Your manifest URL is a private capability.</div>
           <div class="feature"><strong>Self-hosted</strong>aMule and your media stay under your control.</div>
@@ -618,6 +677,8 @@ def _configuration_page(settings: Settings) -> str:
     <script>
       const copyButton = document.getElementById("copy-button");
       const manifestUrl = document.getElementById("manifest-url").textContent;
+      const readiness = document.getElementById("readiness");
+      const statusLabels = {{ connected: "Connected", connecting: "Connecting", disconnected: "Disconnected", ready: "Ready", configured: "Configured", unavailable: "Unavailable", unknown: "Unknown" }};
       copyButton.addEventListener("click", async () => {{
         try {{
           await navigator.clipboard.writeText(manifestUrl);
@@ -627,6 +688,22 @@ def _configuration_page(settings: Settings) -> str:
         }}
         window.setTimeout(() => {{ copyButton.textContent = "Copy manifest URL"; }}, 2400);
       }});
+      fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }})
+        .then((response) => {{ if (!response.ok) throw new Error("readiness unavailable"); return response.json(); }})
+        .then((states) => {{
+          Object.entries(states).forEach(([key, state]) => {{
+            const item = readiness.querySelector(`[data-key="${{key}}"]`);
+            if (!item) return;
+            item.dataset.state = state;
+            item.querySelector(".status-value").textContent = statusLabels[state] || "Unknown";
+          }});
+        }})
+        .catch(() => {{
+          readiness.querySelectorAll(".status").forEach((item) => {{
+            item.dataset.state = "unavailable";
+            item.querySelector(".status-value").textContent = "Unavailable";
+          }});
+        }});
     </script>
   </body>
 </html>"""
