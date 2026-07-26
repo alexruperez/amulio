@@ -479,7 +479,10 @@ def _e2e_fixture_candidate(media_type: str, media_id: str, settings: Settings) -
     link = settings.e2e_fixture_ed2k_link
     if not link:
         return None
-    match = re.fullmatch(r"ed2k://\|file\|([^|]+)\|(\d+)\|([0-9a-fA-F]{32})\|/", link)
+    match = re.fullmatch(
+        r"ed2k://\|file\|([^|]+)\|(\d+)\|([0-9a-fA-F]{32})\|/(?:\|sources,[^|]+\|/)?",
+        link,
+    )
     if match is None:
         logger.warning("Ignoring malformed AMULIO_E2E_FIXTURE_ED2K_LINK")
         return None
