@@ -206,7 +206,9 @@ docker compose --env-file .env.example config
 
 Issues and pull requests are welcome. Please avoid adding credentials, eD2K
 links, copyrighted media metadata, or private server details to the repository.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the local checks and contribution
+workflow, and [SECURITY.md](SECURITY.md) for responsible vulnerability reports.
 
 ## License
 
-aMulio is released under [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html).
+aMulio is released under the [Apache License 2.0](LICENSE).

@@ -163,7 +163,7 @@ Compose and receives an authenticated `/health` response from aMulio.
 - [x] Add structured logs, Prometheus metrics and a minimal `/metrics` policy.
 - [x] Add backup/restore instructions for configuration and cache; do not back
   up transient downloads by default.
-- [ ] Add GitHub Actions for Ruff, tests, Docker build and image security scan.
+- [x] Add GitHub Actions for Ruff, tests, Docker build and image security scan.
 - [ ] Document upgrades from pinned aMule commits to the eventual 3.1 release.
 
 **Acceptance:** the deployment guide covers install, update, rollback, logs,
@@ -186,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 5: production operations** by adding GitHub Actions for
-quality checks, Docker builds and image security scanning. The deployment now
-includes Caddy, protected metrics and documented backup/restore procedures.
+Continue with **Phase 5: production operations** by documenting upgrades from
+pinned aMule commits to the eventual 3.1 release. CI now enforces linting,
+tests, dependency audits, CodeQL and a coverage floor.
 
 Before changing behavior, run:
 
