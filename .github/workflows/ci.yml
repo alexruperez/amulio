@@ -18,7 +18,7 @@ jobs:
     name: Python quality and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -28,7 +28,7 @@ jobs:
       - run: >-
           uv run pytest -rs --cov=amulio --cov-report=term-missing
           --cov-report=xml:coverage.xml --cov-fail-under=82
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: coverage-${{ github.sha }}
@@ -39,14 +39,14 @@ jobs:
     name: Compose configuration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: docker compose --env-file .env.example config --quiet
 
   docker:
     name: Docker builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
