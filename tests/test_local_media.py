@@ -26,7 +26,7 @@ def test_completed_local_video_is_discovered_even_when_small(tmp_path: Path):
 
 def test_completed_local_video_is_web_ready(tmp_path: Path):
     video = tmp_path / "Avatar.2009.720p.H264.mp4"
-    video.write_bytes(b"demo")
+    video.write_bytes(b"x" * 1_500_000)
     settings = Settings(
         install_token="i" * 24,
         token_secret="s" * 32,
@@ -39,3 +39,6 @@ def test_completed_local_video_is_web_ready(tmp_path: Path):
     stream = _stream_object(candidate, type("Request", (), {"app": app})())
 
     assert stream["behaviorHints"]["notWebReady"] is False
+    assert stream["name"] == "✅ aMulio · 720p"
+    assert stream["description"].startswith("✅ Archivo local completado")
+    assert "💾 1.5 MB" in stream["description"]

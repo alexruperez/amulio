@@ -188,6 +188,14 @@ def _download_details(file_state: FileState | None) -> str:
     return f"\n{' · '.join(details)}" if details else "\n⬇️ Descargando en aMule"
 
 
+def _format_size(size: int) -> str:
+    if size < 1_000_000:
+        return f"{size / 1_000:.1f} KB"
+    if size < 1_000_000_000:
+        return f"{size / 1_000_000:.1f} MB"
+    return f"{size / 1_000_000_000:.2f} GB"
+
+
 def _stream_object(
     candidate: Candidate, request: Request, *, file_state: FileState | None = None
 ) -> dict:
@@ -197,18 +205,23 @@ def _stream_object(
         secret=settings.token_secret.get_secret_value(),
         ttl_seconds=settings.candidate_ttl_seconds,
     )
-    return {
-        "name": (
-            f"{_state_marker(file_state.state if file_state else None)} aMulio · "
-            f"{candidate.quality or 'video'}"
-        ),
-        "description": (
+    is_local = candidate.local_path is not None
+    if is_local:
+        description = (
+            f"✅ Archivo local completado\n💾 {_format_size(candidate.size)} · {candidate.name}"
+        )
+    else:
+        description = (
             f"{candidate.name}\n"
-            f"💾 {candidate.size / 1_000_000_000:.2f} GB · "
+            f"💾 {_format_size(candidate.size)} · "
             f"👥 {candidate.sources_total} fuentes "
             f"({candidate.sources_complete} completas)"
             f"{_download_details(file_state)}"
-        ),
+        )
+    stream_state = "ready" if is_local else file_state.state if file_state else None
+    return {
+        "name": (f"{_state_marker(stream_state)} aMulio · {candidate.quality or 'video'}"),
+        "description": description,
         "url": f"{str(settings.public_url).rstrip('/')}/play/{token}",
         "behaviorHints": {
             "filename": candidate.name,
