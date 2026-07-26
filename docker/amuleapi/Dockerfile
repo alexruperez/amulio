@@ -55,5 +55,5 @@ RUN chmod 755 /usr/local/bin/amuleapi-entrypoint
 
 EXPOSE 4713
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=6 \
-    CMD bash -c '</dev/tcp/127.0.0.1/4713' || exit 1
+    CMD bash -c '</dev/tcp/127.0.0.1/${AMULE_API_HTTP_PORT:-4713}' || exit 1
 ENTRYPOINT ["/usr/local/bin/amuleapi-entrypoint"]
