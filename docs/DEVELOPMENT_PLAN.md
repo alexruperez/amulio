@@ -337,9 +337,16 @@ flow.
 
 ### 7.2 Exercise the real network journey
 
+- **Status: in progress (2026-07-27).** A live remote-network check has
+  validated discovery, selection, queueing and honest in-progress reporting in
+  Stremio. The remaining acceptance run must use the controlled legal fixture
+  from a different public IP, so its download can be independently sourced.
+- [x] Validate live remote eD2K discovery, selection, queueing and progress
+  reporting in Stremio.
 - [ ] Publish or control a legal small eD2K fixture with known metadata. See
   [the controlled fixture runbook](E2E_FIXTURE.md); it is prepared but not
-  validated until the seed and downloader complete a real transfer.
+  validated until the seed and downloader complete a real transfer from
+  separate public IP addresses.
 - [ ] From Stremio, select the remote fixture and prove one and only one
   download is queued in aMule.
 - [ ] Verify status refreshes across queued, downloading, completing and ready
