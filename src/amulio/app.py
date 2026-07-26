@@ -744,8 +744,21 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       .button.secondary:hover {{ background: rgba(255,255,255,.08); }}
       .hint {{ margin: 1.1rem 0 0; color: #9dacbd; font-size: .86rem; line-height: 1.55; }}
       .hint strong {{ color: #dbe5f0; }}
+      .profile-settings {{ margin-top: 1.5rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .32); }}
+      .profile-settings summary {{ padding: 1rem 1.1rem; color: #fff; font-weight: 800; cursor: pointer; }}
+      .profile-content {{ display: grid; gap: 1rem; padding: 0 1.1rem 1.1rem; }}
+      .profile-content p {{ margin: 0; color: #9dacbd; font-size: .88rem; line-height: 1.5; }}
+      .profile-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }}
+      .profile-content input, .profile-content select {{ width: 100%; margin-top: .45rem; padding: .72rem; border: 1px solid rgba(255,255,255,.16); border-radius: .65rem; color: #edf2f7; background: #09111f; font: inherit; }}
+      .profile-content input[type="checkbox"] {{ width: auto; margin: 0 .45rem 0 0; accent-color: #7ce3a0; }}
+      .profile-content label {{ margin: 0; }}
+      .checkbox-label {{ display: flex; align-items: center; color: #dbe5f0; font-size: .9rem; font-weight: 700; }}
+      .field-hint {{ color: #8190a4; font-size: .75rem; font-weight: 400; }}
+      .profile-feedback {{ min-height: 1.25rem; color: #9dacbd; font-size: .85rem; line-height: 1.45; }}
+      .profile-feedback[data-kind="success"] {{ color: #8eeaac; }}
+      .profile-feedback[data-kind="error"] {{ color: #f0a0a0; }}
       footer {{ margin-top: 1.5rem; color: #8190a4; font-size: .78rem; text-align: center; }}
-      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .language {{ margin-top: .5rem; }} .features {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
+      @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .language {{ margin-top: .5rem; }} .features, .profile-grid {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
     </style>
   </head>
   <body>
@@ -781,12 +794,47 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           <button class="button secondary" type="button" id="copy-button">{t("copy")}</button>
         </div>
         <p class="hint"><strong>{t("tip_label")}</strong> {t("tip")}</p>
+        <details class="profile-settings">
+          <summary>{t("profile_settings")}</summary>
+          <form class="profile-content" id="profile-form">
+            <p>{t("profile_intro")}</p>
+            <label for="admin-password">{t("admin_password")}
+              <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <div class="profile-grid">
+              <label for="profile-language">{t("profile_language")}
+                <select id="profile-language" name="ui_language">
+                  <option value="en"{" selected" if locale == "en" else ""}>{t("english")}</option>
+                  <option value="es"{" selected" if locale == "es" else ""}>{t("spanish")}</option>
+                </select>
+              </label>
+              <label for="search-languages">{t("search_languages")}
+                <input id="search-languages" name="search_languages" value="en,es" pattern="[A-Za-z0-9,-\\s]+" required>
+                <span class="field-hint">{t("search_languages_hint")}</span>
+              </label>
+              <label for="result-limit">{t("result_limit")}
+                <input id="result-limit" name="result_limit" type="number" min="1" max="50" value="10" required>
+              </label>
+              <label for="maximum-size">{t("maximum_size")}
+                <input id="maximum-size" name="maximum_size" type="number" min="0.1" max="100" step="0.1">
+              </label>
+            </div>
+            <label class="checkbox-label"><input name="allow_season_packs" type="checkbox">{t("season_packs")}</label>
+            <button class="button" type="submit" id="profile-submit">{t("create_profile")}</button>
+            <div class="profile-feedback" id="profile-feedback" role="status"></div>
+          </form>
+        </details>
       </section>
       <footer>{t("footer")}</footer>
     </main>
     <script>
       const copyButton = document.getElementById("copy-button");
-      const manifestUrl = document.getElementById("manifest-url").textContent;
+      let manifestUrl = document.getElementById("manifest-url").textContent;
+      const manifestElement = document.getElementById("manifest-url");
+      const installButton = document.querySelector(".actions .button");
+      const profileForm = document.getElementById("profile-form");
+      const profileFeedback = document.getElementById("profile-feedback");
+      const profileSubmit = document.getElementById("profile-submit");
       const readiness = document.getElementById("readiness");
       const statusLabels = {status_labels};
       copyButton.addEventListener("click", async () => {{
@@ -814,6 +862,52 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             item.querySelector(".status-value").textContent = statusLabels.unavailable;
           }});
         }});
+      profileForm.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const form = new FormData(profileForm);
+        const password = form.get("password");
+        const searchLanguages = String(form.get("search_languages"))
+          .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+        const maximumSize = String(form.get("maximum_size")).trim();
+        profileSubmit.disabled = true;
+        profileSubmit.textContent = "{t("creating_profile")}";
+        profileFeedback.textContent = "";
+        try {{
+          const login = await fetch("/admin/session", {{
+            method: "POST", headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ password }})
+          }});
+          if (login.status === 404) throw new Error("disabled");
+          if (!login.ok) throw new Error("login");
+          const session = await login.json();
+          const profile = await fetch("/admin/profiles", {{
+            method: "POST", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": session.csrf_token }},
+            body: JSON.stringify({{
+              ui_language: form.get("ui_language"), search_languages: searchLanguages,
+              allow_season_packs: form.get("allow_season_packs") === "on",
+              result_limit: Number(form.get("result_limit")),
+              max_size_gb: maximumSize ? Number(maximumSize) : null
+            }})
+          }});
+          if (!profile.ok) throw new Error("profile");
+          const created = await profile.json();
+          const installation = await fetch(`/admin/profiles/${{created.id}}/installation`);
+          if (!installation.ok) throw new Error("installation");
+          manifestUrl = (await installation.json()).manifest_url;
+          manifestElement.textContent = manifestUrl;
+          installButton.href = "stremio://" + manifestUrl.replace(/^https?:\\/\\//, "");
+          form.set("password", "");
+          document.getElementById("admin-password").value = "";
+          profileFeedback.dataset.kind = "success";
+          profileFeedback.textContent = "{t("profile_created")}";
+        }} catch (error) {{
+          profileFeedback.dataset.kind = "error";
+          profileFeedback.textContent = error.message === "disabled" ? "{t("admin_disabled")}" : "{t("admin_failed")}";
+        }} finally {{
+          profileSubmit.disabled = false;
+          profileSubmit.textContent = "{t("create_profile")}";
+        }}
+      }});
     </script>
   </body>
 </html>"""

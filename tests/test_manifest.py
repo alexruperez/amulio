@@ -69,6 +69,8 @@ def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
     assert '<html lang="es">' in configured.text
     assert "Instalar en Stremio" in configured.text
     assert "Estado de la instancia" in configured.text
+    assert 'id="profile-form"' in configured.text
+    assert "Ajustes del perfil" in configured.text
     get_settings.cache_clear()
 
 
