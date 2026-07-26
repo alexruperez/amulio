@@ -16,8 +16,8 @@ services:
       - amule_incoming:/data/incoming:ro
     secrets:
       - amuleapi_admin_password
-    ports:
-      - "${AMULIO_PORT:-8000}:8000"
+    expose:
+      - "8000"
     depends_on:
       amuleapi:
         condition: service_healthy
@@ -32,6 +32,24 @@ services:
       start_period: 30s
       retries: 4
     networks: [frontend, backend]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:?Set CADDY_DOMAIN in .env}
+      CADDY_EMAIL: ${CADDY_EMAIL:?Set CADDY_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      amulio:
+        condition: service_healthy
+    networks: [frontend]
 
   amuleapi:
     build:
@@ -53,6 +71,8 @@ volumes:
   amule_config:
   amule_incoming:
   amule_temp:
+  caddy_data:
+  caddy_config:
 
 secrets:
   amule_ec_password:

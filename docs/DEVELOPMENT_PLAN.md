@@ -34,7 +34,7 @@ later, opt-in experiment.
 | Download/shared SSE subscription | Done | Snapshot-then-stream reconciliation, `resync` recovery and monitor health are persisted. |
 | Downloading-state player UX | Done | Bundled status videos, live stream metadata and idempotent enqueueing. |
 | Reproducible aMule 3.1 image | Not started | Compose currently expects a supplied `AMULE_API_IMAGE`. |
-| Production Caddy deployment | Not started | Local Compose only. |
+| Production Caddy deployment | In progress | Caddy exposes only 80/443 and proxies HTTPS traffic to aMulio on the private frontend network. |
 
 ## Development order
 
@@ -159,7 +159,7 @@ Compose and receives an authenticated `/health` response from aMulio.
 
 ## Phase 5 — Production operations
 
-- [ ] Add Caddy with automatic HTTPS and no direct public aMule/amuleapi ports.
+- [x] Add Caddy with automatic HTTPS and no direct public aMule/amuleapi ports.
 - [ ] Add structured logs, Prometheus metrics and a minimal `/metrics` policy.
 - [ ] Add backup/restore instructions for configuration and cache; do not back
   up transient downloads by default.
@@ -186,9 +186,10 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 5: production operations**. The full private Docker
-stack has been built and verified with a healthy authenticated aMule control
-plane.
+Continue with **Phase 5: production operations** by adding structured logs and
+Prometheus metrics. The full private Docker stack has been built and verified
+with a healthy authenticated aMule control plane, and Caddy now owns the public
+HTTP/HTTPS ports.
 
 Before changing behavior, run:
 
