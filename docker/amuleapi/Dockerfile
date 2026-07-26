@@ -39,7 +39,7 @@ FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         bash ca-certificates coreutils gosu libcrypto++8 libcurl4 libglib2.0-0 \
-        python3 \
+        libpcre2-32-0 python3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home --home-dir /var/lib/amule amule
 

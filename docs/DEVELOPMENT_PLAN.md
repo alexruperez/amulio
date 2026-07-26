@@ -139,20 +139,20 @@ cannot read any file outside the configured Incoming roots.
 
 ### 4.1 Build a pinned aMule/amuleapi image
 
-- [ ] Add a multi-stage Dockerfile that compiles aMule from a pinned upstream
+- [x] Add a multi-stage Dockerfile that compiles aMule from a pinned upstream
   commit with `BUILD_DAEMON=ON` and `BUILD_AMULEAPI=ON`.
-- [ ] Run `amuled` and `amuleapi` under a non-root user.
-- [ ] Bootstrap `amule.conf` and `amuleapi.conf` from Docker secrets with
+- [x] Run `amuled` and `amuleapi` under a non-root user.
+- [x] Bootstrap `amule.conf` and `amuleapi.conf` from Docker secrets with
   restrictive permissions.
-- [ ] Keep EC and amuleapi ports internal only.
+- [x] Keep EC and amuleapi ports internal only.
 
 ### 4.2 Complete Compose deployment
 
-- [ ] Replace the placeholder `AMULE_API_IMAGE` flow with the local build.
-- [ ] Add named volumes for aMule configuration, Temp and Incoming.
-- [ ] Mount Incoming read-write to aMule and read-only to aMulio at identical
+- [x] Replace the placeholder `AMULE_API_IMAGE` flow with the local build.
+- [x] Add named volumes for aMule configuration, Temp and Incoming.
+- [x] Mount Incoming read-write to aMule and read-only to aMulio at identical
   paths.
-- [ ] Add healthchecks and service dependency conditions.
+- [x] Add healthchecks and service dependency conditions.
 
 **Acceptance:** a fresh host can start the full private stack with Docker
 Compose and receives an authenticated `/health` response from aMulio.
@@ -186,9 +186,9 @@ reliable startup and seeking across supported clients.
 
 ## Next session starting point
 
-Continue with **Phase 3.1: completed-file integration fixtures**. The Stremio
-flow now gives purposeful feedback while aMule downloads and queues a selected
-hash only once.
+Continue with **Phase 5: production operations**. The full private Docker
+stack has been built and verified with a healthy authenticated aMule control
+plane.
 
 Before changing behavior, run:
 
