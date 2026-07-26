@@ -307,7 +307,7 @@ connector avoids opening an inbound web port on the Home Assistant host.
 - [x] Show live aMule EC, eD2K, Kad, Incoming storage and public-URL readiness.
 - [x] Add **Install in Stremio** and **Copy manifest URL** actions with clear
   success/error feedback.
-- [ ] Add UI tests for desktop/mobile layouts, keyboard operation, invalid
+- [x] Add UI tests for desktop/mobile layouts, keyboard operation, invalid
   settings and install-link generation.
 
 ### 6.3 Add official branding and i18n

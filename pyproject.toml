@@ -20,6 +20,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pip-audit>=2.9,<3.0",
+  "playwright>=1.52,<2.0",
   "pytest>=9.0.3,<10.0",
   "pytest-asyncio>=1.0,<2.0",
   "pytest-cov>=6.0,<7.0",
@@ -38,7 +39,10 @@ include = ["src/amulio/assets/*"]
 addopts = "-q"
 asyncio_mode = "auto"
 pythonpath = ["src"]
-markers = ["integration: requires the Docker aMule/amuleapi fixture"]
+markers = [
+  "integration: requires the Docker aMule/amuleapi fixture",
+  "ui: requires the Playwright Chromium browser",
+]
 
 [tool.ruff]
 line-length = 100
