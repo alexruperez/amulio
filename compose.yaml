@@ -1,3 +1,5 @@
+name: amulio
+
 services:
   amulio:
     build: .
@@ -14,6 +16,7 @@ services:
     volumes:
       # Keep this path identical to aMule's Incoming directory.
       - amule_incoming:/data/incoming:ro
+      - amulio_data:/app/data
     secrets:
       - amuleapi_admin_password
     expose:
@@ -68,6 +71,7 @@ services:
     networks: [backend]
 
 volumes:
+  amulio_data:
   amule_config:
   amule_incoming:
   amule_temp:

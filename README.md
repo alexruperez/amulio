@@ -158,6 +158,13 @@ default. To enable it for a private scraper, set `AMULIO_METRICS_TOKEN` and
 send `Authorization: Bearer <token>`; keep that scraper on the private Docker
 network or protect it separately at the proxy.
 
+### Operations
+
+The production backup, restore, upgrade, rollback and incident-response
+procedures are in [the operations guide](docs/OPERATIONS.md). It preserves
+configuration, the aMulio cache and Caddy certificate state, while deliberately
+excluding aMule's transient Temp directory and Incoming media by default.
+
 ## Security and privacy
 
 - Never expose the aMule EC port or `amuleapi` HTTP port to the Internet.
