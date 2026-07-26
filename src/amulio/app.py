@@ -369,7 +369,18 @@ async def root() -> RedirectResponse:
 
 @app.get("/configure", response_class=HTMLResponse)
 async def configure(request: Request):
+    return _configuration_page(_settings(request))
+
+
+@app.get("/{installation_token}/configure", response_class=HTMLResponse)
+async def tokenized_configure(installation_token: str, request: Request):
+    """Serve Stremio's configuration URL, which is relative to the manifest."""
     settings = _settings(request)
+    _require_install_token(installation_token, settings)
+    return _configuration_page(settings)
+
+
+def _configuration_page(settings: Settings) -> str:
     manifest_url = (
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/manifest.json"
