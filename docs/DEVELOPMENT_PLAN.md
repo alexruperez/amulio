@@ -293,7 +293,8 @@ connector avoids opening an inbound web port on the Home Assistant host.
 ### 6.1 Build the configuration model
 
 - [x] Define versioned user settings for UI language, preferred result
-  languages, quality filters, result limit, maximum size and season packs.
+  languages, quality filters, result limit, maximum size, season packs and
+  stream-detail visibility.
 - [x] Store profiles server-side under random, revocable configuration IDs;
   never put aMule credentials in a manifest URL.
 - [x] Separate read-only Stremio capabilities from an authenticated
@@ -334,7 +335,8 @@ flow.
 - [x] Use distinct **Ready to play**, **Download with aMule** and
   **Downloading** labels and icons.
 - [x] Present quality, size, language and sources without implying that a
-  remote result is already cached.
+  remote result is already cached; keep action/quality in the left label and
+  reserve the right-hand description for filename and selected file facts.
 - [x] Return a useful empty/error state when eD2K/Kad is disconnected or no
   acceptable candidate exists.
 

@@ -26,6 +26,10 @@ def test_profiles_can_be_updated_and_revoked(tmp_path):
             allow_season_packs=True,
             result_limit=25,
             max_size_gb=15,
+            show_stream_size=False,
+            show_stream_sources=False,
+            show_stream_language=False,
+            show_stream_technical_details=False,
         )
         updated = store.update(profile.id, preferences)
         revoked = store.revoke(profile.id)

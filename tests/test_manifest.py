@@ -179,8 +179,9 @@ def test_profile_manifest_and_streams_use_revocable_profile_preferences(monkeypa
     assert manifest.json()["description"].startswith("Busca contenido")
     assert stream.status_code == 200
     candidate_stream = stream.json()["streams"][0]
-    assert candidate_stream["name"] == "🧲 aMulio · Descargar con aMule · 1080p"
-    assert "💾 2.00 GB · 👥 4 fuentes (2 completas) · 🌐 ES" in candidate_stream["description"]
+    assert candidate_stream["name"] == "🧲 Descargar con aMulio · 1080p"
+    assert "💾 2.00 GB · 👥 4 fuentes" in candidate_stream["description"]
+    assert "🌐 ES" in candidate_stream["description"]
     assert candidate_stream["behaviorHints"]["notWebReady"] is True
     assert observed["preferences"] == profile.preferences
     assert observed["cache_scope"] == f"profile:{profile.id}"

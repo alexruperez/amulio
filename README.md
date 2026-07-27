@@ -84,6 +84,8 @@ contains:
 - Signed stream URLs that do not expose aMule credentials.
 - Enqueueing selected eD2K links in aMule.
 - Localised download, progress, unavailable and empty-result status videos.
+- A compact, configurable stream layout: action and quality on the left;
+  filename plus selected file facts on the right.
 - Safe playback of completed files from approved Incoming roots.
 - HTTP `Range`/seek support via Starlette's `FileResponse`.
 - A reproducible Docker Compose stack with a pinned aMule development build,

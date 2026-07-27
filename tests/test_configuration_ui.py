@@ -93,11 +93,18 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
     assert page.locator("#result-limit").evaluate("element => !element.checkValidity()")
 
     page.locator("#result-limit").fill("10")
+    page.locator('input[name="show_stream_sources"]').uncheck()
     page.locator("#admin-password").fill("a" * 32)
-    page.locator("#profile-submit").click()
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/admin/profiles") and response.request.method == "POST"
+        )
+    ) as profile_response:
+        page.locator("#profile-submit").click()
     expect(page.locator("#profile-feedback")).to_contain_text("Profile manifest created")
     expect(page.locator("#manifest-url")).to_contain_text("/profile/")
     assert "/profile/" in (install_link.get_attribute("href") or "")
+    assert profile_response.value.json()["preferences"]["show_stream_sources"] is False
 
     page.set_viewport_size({"width": 375, "height": 812})
     page.reload()

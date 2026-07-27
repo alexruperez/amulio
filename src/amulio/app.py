@@ -228,7 +228,12 @@ def _state_marker(state: str) -> str:
     return "🧲"
 
 
-def _download_details(file_state: FileState | None, *, locale: Locale = "en") -> str:
+def _download_details(
+    file_state: FileState | None,
+    *,
+    locale: Locale = "en",
+    show_sources: bool = True,
+) -> str:
     if file_state is None or file_state.state != "downloading":
         return ""
     details: list[str] = []
@@ -236,13 +241,11 @@ def _download_details(file_state: FileState | None, *, locale: Locale = "en") ->
         details.append(f"⬇️ {file_state.percent:.1f}%")
     if file_state.speed_bps:
         details.append(f"⚡ {file_state.speed_bps / 1_000_000:.2f} MB/s")
-    if file_state.sources_total is not None:
+    if show_sources and file_state.sources_total is not None:
         details.append(
-            f"👥 {translate(locale, 'stream_active_sources').format(count=file_state.sources_total)}"
+            f"👥 {translate(locale, 'stream_known_sources').format(count=file_state.sources_total)}"
         )
-    return (
-        f"\n{' · '.join(details)}" if details else f"\n⬇️ {translate(locale, 'stream_downloading')}"
-    )
+    return f"\n{' · '.join(details)}" if details else ""
 
 
 def _format_size(size: int) -> str:
@@ -253,12 +256,46 @@ def _format_size(size: int) -> str:
     return f"{size / 1_000_000_000:.2f} GB"
 
 
+def _stream_facts(
+    candidate: Candidate,
+    *,
+    preferences: ProfilePreferences,
+    locale: Locale,
+) -> list[str]:
+    """Return only file facts that the addon knows and the profile requested."""
+    primary: list[str] = []
+    if preferences.show_stream_size:
+        primary.append(f"💾 {_format_size(candidate.size)}")
+    if preferences.show_stream_sources and candidate.sources_total:
+        primary.append(
+            f"👥 {translate(locale, 'stream_sources').format(count=candidate.sources_total)}"
+        )
+
+    secondary: list[str] = []
+    if preferences.show_stream_technical_details:
+        technical = [
+            value for value in (candidate.codec, "HDR" if candidate.hdr else None) if value
+        ]
+        if technical:
+            secondary.append(f"🎞️ {' · '.join(technical)}")
+        if candidate.release_group:
+            secondary.append(f"⚙️ {candidate.release_group}")
+    if preferences.show_stream_language and candidate.language:
+        secondary.append(f"🌐 {candidate.language.upper()}")
+
+    lines = [" · ".join(primary)] if primary else []
+    if secondary:
+        lines.append(" · ".join(secondary))
+    return lines
+
+
 def _stream_object(
     candidate: Candidate,
     request: Request,
     *,
     file_state: FileState | None = None,
     locale: Locale = "en",
+    preferences: ProfilePreferences | None = None,
 ) -> dict:
     settings = _settings(request)
     token = sign(
@@ -274,6 +311,7 @@ def _stream_object(
         if file_state is not None and file_state.state == "downloading"
         else "download"
     )
+    display_preferences = preferences or ProfilePreferences()
     stream_label = translate(
         locale,
         {
@@ -283,19 +321,19 @@ def _stream_object(
         }[stream_state],
     )
     quality = candidate.quality or translate(locale, "stream_quality_fallback")
-    if is_local:
-        description = f"{translate(locale, 'stream_completed')}\n💾 {_format_size(candidate.size)} · {candidate.name}"
-    else:
-        language = f" · 🌐 {candidate.language.upper()}" if candidate.language else ""
-        description = (
-            f"{candidate.name}\n"
-            f"🧲 {stream_label}\n"
-            f"💾 {_format_size(candidate.size)} · 👥 "
-            f"{translate(locale, 'stream_sources').format(total=candidate.sources_total, complete=candidate.sources_complete)}"
-            f"{language}{_download_details(file_state, locale=locale)}"
+    details = _stream_facts(candidate, preferences=display_preferences, locale=locale)
+    if stream_state == "downloading":
+        details.append(
+            _download_details(
+                file_state,
+                locale=locale,
+                show_sources=display_preferences.show_stream_sources
+                and not bool(candidate.sources_total),
+            ).lstrip("\n")
         )
+    description = "\n".join([candidate.name, *(detail for detail in details if detail)])
     return {
-        "name": f"{_state_marker(stream_state)} aMulio · {stream_label} · {quality}",
+        "name": f"{_state_marker(stream_state)} {stream_label} · {quality}",
         "description": description,
         "url": f"{str(settings.public_url).rstrip('/')}/play/{token}",
         "behaviorHints": {
@@ -890,6 +928,13 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
               </label>
               </div>
             </fieldset>
+            <fieldset class="profile-group"{profile_disabled}>
+              <legend>{t("profile_stream_display")}</legend>
+              <label class="checkbox-label"><input name="show_stream_size" type="checkbox" checked>{t("stream_show_size")}</label>
+              <label class="checkbox-label"><input name="show_stream_sources" type="checkbox" checked>{t("stream_show_sources")}</label>
+              <label class="checkbox-label"><input name="show_stream_language" type="checkbox" checked>{t("stream_show_language")}</label>
+              <label class="checkbox-label"><input name="show_stream_technical_details" type="checkbox" checked>{t("stream_show_technical")}</label>
+            </fieldset>
             <button class="button" type="submit" id="profile-submit"{profile_disabled}>{t("create_profile")}</button>
             <div class="profile-feedback" id="profile-feedback" role="status"></div>
           </form>
@@ -977,7 +1022,11 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
               ui_language: form.get("ui_language"), search_languages: searchLanguages,
               allow_season_packs: form.get("allow_season_packs") === "on",
               result_limit: Number(form.get("result_limit")),
-              max_size_gb: maximumSize ? Number(maximumSize) : null
+              max_size_gb: maximumSize ? Number(maximumSize) : null,
+              show_stream_size: form.get("show_stream_size") === "on",
+              show_stream_sources: form.get("show_stream_sources") === "on",
+              show_stream_language: form.get("show_stream_language") === "on",
+              show_stream_technical_details: form.get("show_stream_technical_details") === "on"
             }})
           }});
           if (!profile.ok) throw new Error("profile");
@@ -1200,6 +1249,7 @@ async def _stream_listing(
                 request,
                 file_state=states.get(candidate.hash),
                 locale=locale,
+                preferences=preferences,
             )
             for candidate in candidates
         ]

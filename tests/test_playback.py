@@ -7,6 +7,7 @@ from amulio.app import _download_details, _stream_object, app, play
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings
 from amulio.models import Candidate
+from amulio.profiles import ProfilePreferences
 from amulio.search_locks import MediaSearchLocks
 from amulio.tokens import sign
 
@@ -34,7 +35,7 @@ def test_download_details_include_live_metrics():
 
     assert "50.5%" in details
     assert "2.50 MB/s" in details
-    assert "4 active sources" in details
+    assert "4 known sources" in details
 
 
 def test_remote_streams_make_download_intent_and_progress_explicit():
@@ -60,10 +61,46 @@ def test_remote_streams_make_download_intent_and_progress_explicit():
         ),
     )
 
-    assert new_stream["name"] == "🧲 aMulio · Download with aMule · video"
-    assert "🧲 Download with aMule" in new_stream["description"]
-    assert downloading_stream["name"] == "⬇️ aMulio · Downloading in aMule · video"
+    assert new_stream["name"] == "🧲 Download with aMulio · video"
+    assert "Download with aMulio" not in new_stream["description"]
+    assert "💾 2.00 GB" in new_stream["description"]
+    assert downloading_stream["name"] == "⬇️ Downloading with aMulio · video"
     assert "1.0%" in downloading_stream["description"]
+    assert "2 known sources" in downloading_stream["description"]
+
+
+def test_stream_display_preferences_hide_optional_file_facts():
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+    )
+    app.state.settings = settings
+    request = type("Request", (), {"app": app})()
+    candidate = _candidate().model_copy(
+        update={
+            "quality": "1080p",
+            "sources_total": 12,
+            "language": "es",
+            "codec": "HEVC",
+            "hdr": True,
+            "release_group": "Example",
+        }
+    )
+
+    stream = _stream_object(
+        candidate,
+        request,
+        preferences=ProfilePreferences(
+            show_stream_size=False,
+            show_stream_sources=False,
+            show_stream_language=False,
+            show_stream_technical_details=False,
+        ),
+    )
+
+    assert stream["name"] == "🧲 Download with aMulio · 1080p"
+    assert stream["description"] == candidate.name
 
 
 async def test_play_enqueues_a_new_download_once_and_returns_a_status_video(tmp_path):

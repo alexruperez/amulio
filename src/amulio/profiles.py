@@ -17,6 +17,10 @@ class ProfilePreferences(BaseModel):
     allow_season_packs: bool = False
     result_limit: int = Field(default=10, ge=1, le=50)
     max_size_gb: float | None = Field(default=None, gt=0, le=100)
+    show_stream_size: bool = True
+    show_stream_sources: bool = True
+    show_stream_language: bool = True
+    show_stream_technical_details: bool = True
 
 
 class AddonProfile(BaseModel):
