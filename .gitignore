@@ -9,3 +9,8 @@ __pycache__/
 coverage.xml
 *.py[cod]
 data/
+# VPS-local deployment overrides and generated test data
+compose.vps.yaml
+compose.vps.yaml.*
+e2e-secrets/
+e2e-fixture/
