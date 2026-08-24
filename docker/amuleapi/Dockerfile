@@ -37,7 +37,8 @@ RUN git clone https://github.com/amule-org/amule.git source \
 
 FROM debian:bookworm-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         bash ca-certificates coreutils gosu libcrypto++8 libcurl4 libglib2.0-0 \
         libpcre2-32-0 python3 \
     && rm -rf /var/lib/apt/lists/* \
