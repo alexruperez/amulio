@@ -3,8 +3,7 @@ FROM debian:bookworm-slim AS builder
 ARG AMULE_REF=7958b6926910b1f59b477b146bcf8882139f9558
 ARG WX_REF=5ff25322553c1870cf20a2e1ba6f20ed50d9fe9a
 
-RUN apt-get update && apt-get upgrade -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake git libboost-dev libcrypto++-dev \
         libcurl4-openssl-dev libglib2.0-dev libgtk-3-dev libwxgtk3.2-dev \
         pkg-config zlib1g-dev \
