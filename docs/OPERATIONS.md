@@ -128,6 +128,14 @@ docker compose ps
 docker compose logs --tail=100 amulio amuleapi caddy
 ```
 
+The aMulio image installs its Python dependencies from `uv.lock`
+(`uv sync --locked`), so the deployed versions are the ones that CI audits.
+Docker rebuilds that layer whenever `uv.lock` or `pyproject.toml` changes. Add
+`--pull --no-cache` to `docker compose build` when you also want fresh base-image
+and OS security patches, which are otherwise reused from the build cache. To
+rebuild and restart only aMulio, leaving aMule connected, run
+`docker compose build amulio` and `docker compose up -d --no-deps amulio`.
+
 If a new revision fails, return to the recorded commit and recreate only the
 containers. Persistent volumes remain intact:
 
