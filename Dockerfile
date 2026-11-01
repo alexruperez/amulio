@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.15-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.25 /uv /usr/local/bin/uv
 
@@ -17,7 +17,7 @@ COPY src ./src
 RUN uv sync --locked --no-dev --no-editable
 
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
