@@ -370,7 +370,7 @@ play the completed legal fixture without touching aMule's UI.
 
 ### 8.1 Package the app
 
-- [ ] Create a Home Assistant app repository with `config.yaml`, translated
+- [ ] Create the [aMulio Home Assistant app repository](https://github.com/alexruperez/amulio-ha) structure with `config.yaml`, translated
   options, documentation, changelog, icon/logo and AppArmor profile.
 - [ ] Supervise `amuled`, `amuleapi` and aMulio in one least-privileged image.
 - [ ] Publish signed `amd64` and `aarch64` images and test fresh install,
