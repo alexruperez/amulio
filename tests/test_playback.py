@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import Request
 
-from amulio.app import _download_details, _stream_object, app, play
+from amulio.app import _download_details, _e2e_fixture_candidate, _stream_object, app, play
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings
 from amulio.models import Candidate
@@ -21,7 +21,40 @@ def _candidate() -> Candidate:
     )
 
 
-def test_download_details_include_live_metrics():
+def test_configured_e2e_fixture_is_explicit_and_scoped_to_its_movie():
+    fixture_hash = "a" * 32
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+        e2e_fixture_media_id="tt1254207",
+        e2e_fixture_ed2k_link=(
+            f"ed2k://|file|Big.Buck.Bunny.2008.CC-BY-3.0.aMulio-E2E.mp4|20971520|{fixture_hash}|/"
+        ),
+    )
+
+    fixture = _e2e_fixture_candidate("movie", "tt1254207", settings)
+
+    assert fixture is not None
+    assert fixture.name == "Big.Buck.Bunny.2008.CC-BY-3.0.aMulio-E2E.mp4"
+    assert fixture.size == 20_971_520
+    assert fixture.hash == fixture_hash
+    assert fixture.sources_total == fixture.sources_complete == 1
+    assert _e2e_fixture_candidate("movie", "tt9999999", settings) is None
+    assert _e2e_fixture_candidate("series", "tt1254207", settings) is None
+
+
+def test_malformed_e2e_fixture_link_is_not_exposed():
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+        e2e_fixture_media_id="tt1254207",
+        e2e_fixture_ed2k_link="ed2k://|file|not-a-valid-fixture|/",
+    )
+
+    assert _e2e_fixture_candidate("movie", "tt1254207", settings) is None
+
     details = _download_details(
         FileState(
             state="downloading",
