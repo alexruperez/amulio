@@ -586,7 +586,10 @@ async def metrics(request: Request):
 
 @app.get("/")
 async def root() -> RedirectResponse:
-    return RedirectResponse("/configure")
+    # Keep this relative so Home Assistant Ingress retains its per-app prefix.
+    # An absolute `/configure` escapes the Ingress URL and opens a blank Core
+    # route instead of aMulio's configuration page.
+    return RedirectResponse("configure")
 
 
 @app.get("/configure", response_class=HTMLResponse)
