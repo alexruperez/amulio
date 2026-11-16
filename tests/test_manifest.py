@@ -25,6 +25,20 @@ def test_private_manifest_requires_the_installation_token(monkeypatch):
     get_settings.cache_clear()
 
 
+def test_root_configuration_redirect_is_relative_for_home_assistant_ingress(monkeypatch):
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "configure"
+    get_settings.cache_clear()
+
+
 def test_stremio_tokenized_configuration_url_requires_the_installation_token(monkeypatch):
     monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
     monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
