@@ -91,6 +91,11 @@ contains:
 - A reproducible Docker Compose stack with a pinned aMule development build,
   private control ports and Caddy HTTPS.
 
+### Deployment targets
+
+- **Portable application and Docker:** this repository contains the aMulio core and the reference Docker Compose deployment for a home server or VPS. Each deployment keeps its own queue, aMule configuration and downloaded media locally.
+- **Home Assistant OS:** the [aMulio Home Assistant app repository](https://github.com/alexruperez/amulio-ha) packages the same node for HAOS, with persistent app storage and Home Assistant administration. It is the intended route when downloads should live on the Home Assistant installation.
+
 ### Current development focus
 
 - Complete the controlled legal eD2K end-to-end test from a seed on a second
