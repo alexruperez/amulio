@@ -80,6 +80,32 @@ class AmuleApiClient:
             raise AmuleApiError("amuleapi downloads response did not include a downloads list")
         return downloads
 
+    async def pause_downloads(self, hashes: list[str]) -> list[dict[str, Any]]:
+        """Pause active downloads using amuleapi's bulk lifecycle endpoint."""
+        return await self._set_download_status(hashes, "paused")
+
+    async def resume_downloads(self, hashes: list[str]) -> list[dict[str, Any]]:
+        """Resume active downloads using amuleapi's bulk lifecycle endpoint."""
+        return await self._set_download_status(hashes, "resumed")
+
+    async def _set_download_status(self, hashes: list[str], status: str) -> list[dict[str, Any]]:
+        response = await self._request(
+            "PATCH", "downloads", json={"hashes": hashes, "status": status}
+        )
+        return self._mutation_results(response, "PATCH downloads")
+
+    async def cancel_downloads(self, hashes: list[str]) -> list[dict[str, Any]]:
+        """Cancel active downloads and let aMule remove its own partfile state."""
+        response = await self._request("DELETE", "downloads", json={"hashes": hashes})
+        return self._mutation_results(response, "DELETE downloads")
+
+    @staticmethod
+    def _mutation_results(response: httpx.Response, operation: str) -> list[dict[str, Any]]:
+        results = response.json().get("results")
+        if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
+            raise AmuleApiError(f"amuleapi {operation} response did not include mutation results")
+        return results
+
     async def shared_files(self) -> list[dict[str, Any]]:
         response = await self._request("GET", "shared")
         shared = response.json().get("shared", [])
