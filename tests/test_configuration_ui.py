@@ -27,6 +27,7 @@ def configuration_server(tmp_path: Path) -> Iterator[str]:
         "AMULIO_INSTALL_TOKEN": "i" * 24,
         "AMULIO_TOKEN_SECRET": "s" * 32,
         "AMULIO_ADMIN_PASSWORD": "a" * 32,
+        "AMULIO_ADMIN_BOOTSTRAP_TOKEN": "b" * 32,
         "AMULIO_ALLOWED_MEDIA_ROOTS": str(tmp_path),
         "AMULE_API_ADMIN_PASSWORD": "test-password",
         "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
@@ -80,6 +81,17 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
         + "/manifest.json"
     )
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.goto(configuration_server + "#admin-bootstrap=" + "b" * 32)
+    page.locator("#download-manager summary").click()
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/admin/bootstrap") and response.request.method == "POST"
+        )
+    ) as bootstrap_response:
+        page.locator("#manager-bootstrap-open").click()
+    assert bootstrap_response.value.status == 200
+    assert "#admin-bootstrap" not in page.url
 
     profile_summary = page.locator(".profile-settings summary")
     profile_summary.focus()
