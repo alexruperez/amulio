@@ -13,7 +13,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -211,18 +211,44 @@ def _require_admin_session(request: Request) -> dict:
 def _trusted_ingress_user(request: Request, settings: Settings) -> str | None:
     """Accept a Supervisor identity header only from an explicitly trusted peer."""
     user_id = request.headers.get("X-Remote-User-ID", "").strip()
-    client_host = request.client.host if request.client else ""
-    if not user_id or not client_host:
+    if not user_id or not _is_trusted_ingress_proxy(request, settings):
         return None
+    return user_id
+
+
+def _is_trusted_ingress_proxy(request: Request, settings: Settings) -> bool:
+    """Return whether the TCP peer is an explicitly configured Ingress proxy."""
+    client_host = request.client.host if request.client else ""
+    if not client_host:
+        return False
     try:
         client_address = ipaddress.ip_address(client_host)
     except ValueError:
+        return False
+    return any(client_address in network for network in settings.trusted_ingress_proxies)
+
+
+def _trusted_ingress_path(request: Request, settings: Settings) -> str | None:
+    """Return a validated external app prefix from a trusted Supervisor proxy."""
+    if not _is_trusted_ingress_proxy(request, settings):
         return None
-    return (
-        user_id
-        if any(client_address in network for network in settings.trusted_ingress_proxies)
-        else None
-    )
+    value = request.headers.get("X-Ingress-Path", "")
+    parsed = urlsplit(value)
+    path = parsed.path.rstrip("/")
+    if (
+        not value
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+        or value != parsed.path
+        or not path.startswith("/")
+        or path.startswith("//")
+        or unquote(path) != path
+        or any(segment in {"", ".", ".."} for segment in path.split("/")[1:])
+    ):
+        return None
+    return path
 
 
 def _require_csrf(request: Request) -> None:
@@ -632,10 +658,14 @@ async def root() -> RedirectResponse:
 @app.get("/configure", response_class=HTMLResponse)
 async def configure(request: Request):
     settings = _settings(request)
+    ingress_sso = (
+        _trusted_ingress_user(request, settings) is not None
+        and _trusted_ingress_path(request, settings) is not None
+    )
     return _configuration_page(
         settings,
         resolve_locale(request.query_params.get("lang")),
-        ingress_sso=_trusted_ingress_user(request, settings) is not None,
+        ingress_sso=ingress_sso,
     )
 
 
@@ -659,6 +689,22 @@ async def configuration_status(installation_token: str, request: Request, api: A
     """Return non-sensitive readiness data for the private install page."""
     settings = _settings(request)
     _require_install_token(installation_token, settings)
+    return await _configuration_status(settings, api)
+
+
+@app.get("/configure/status")
+async def ingress_configuration_status(request: Request, api: ApiClient):
+    """Return readiness data only to the trusted Supervisor Ingress proxy."""
+    settings = _settings(request)
+    if (
+        _trusted_ingress_user(request, settings) is None
+        or _trusted_ingress_path(request, settings) is None
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return await _configuration_status(settings, api)
+
+
+async def _configuration_status(settings: Settings, api: ApiClient) -> Response:
     storage_ready = bool(settings.media_roots) and all(
         Path(media_root).is_dir() for media_root in settings.media_roots
     )
@@ -700,7 +746,9 @@ class AdminSessionResponse(BaseModel):
     expires_in_seconds: int
 
 
-def _establish_admin_session(response: Response, settings: Settings) -> AdminSessionResponse:
+def _establish_admin_session(
+    response: Response, settings: Settings, *, cookie_path: str = "/admin"
+) -> AdminSessionResponse:
     """Set an HttpOnly, CSRF-bound administrative session after authentication."""
     csrf_token = secrets.token_urlsafe(32)
     session_token = sign(
@@ -715,7 +763,7 @@ def _establish_admin_session(response: Response, settings: Settings) -> AdminSes
         httponly=True,
         secure=str(settings.public_url).startswith("https://"),
         samesite="strict",
-        path="/admin",
+        path=cookie_path,
     )
     response.headers["Cache-Control"] = "no-store"
     return AdminSessionResponse(
@@ -795,15 +843,23 @@ async def bootstrap_admin_session(
 async def ingress_admin_session(request: Request, response: Response) -> AdminSessionResponse:
     """Bootstrap only from a Supervisor proxy explicitly trusted by the operator."""
     settings = _settings(request)
-    if _trusted_ingress_user(request, settings) is None:
+    ingress_path = _trusted_ingress_path(request, settings)
+    if _trusted_ingress_user(request, settings) is None or ingress_path is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    return _establish_admin_session(response, settings)
+    return _establish_admin_session(response, settings, cookie_path=f"{ingress_path}/admin")
 
 
 @app.delete("/admin/session", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_admin_session(request: Request, response: Response) -> None:
     _require_csrf(request)
-    response.delete_cookie("amulio_admin", path="/admin", httponly=True, samesite="strict")
+    settings = _settings(request)
+    ingress_path = _trusted_ingress_path(request, settings)
+    response.delete_cookie(
+        "amulio_admin",
+        path=f"{ingress_path}/admin" if ingress_path is not None else "/admin",
+        httponly=True,
+        samesite="strict",
+    )
 
 
 @app.get("/admin/downloads")
@@ -924,10 +980,15 @@ def _configuration_page(
     stremio_url = html.escape(
         "stremio://" + manifest_url.removeprefix("https://").removeprefix("http://")
     )
-    status_url = html.escape(
-        f"{str(settings.public_url).rstrip('/')}/"
-        f"{settings.install_token.get_secret_value()}/configure/status"
+    status_url = (
+        "configure/status"
+        if ingress_sso
+        else (
+            f"{str(settings.public_url).rstrip('/')}/"
+            f"{settings.install_token.get_secret_value()}/configure/status"
+        )
     )
+    status_url = html.escape(status_url)
     # Keep this relative so Home Assistant Ingress retains its private app prefix.
     logo_url = html.escape(f"assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
     profile_management_enabled = settings.admin_password is not None and not ingress_sso
@@ -936,11 +997,11 @@ def _configuration_page(
     manager_hidden = " hidden" if settings.admin_password is None and not ingress_sso else ""
     manager_auth = (
         "<p>Home Assistant Ingress authorizes this manager session.</p>"
-        '<div class="actions"><button class="button secondary" type="button" id="manager-load">Open download manager</button></div>'
+        '<div class="actions"><button class="button" type="button" id="manager-load">Open download manager</button></div>'
         if ingress_sso
         else '<label for="manager-password">Administrator password'
         '<input id="manager-password" type="password" autocomplete="current-password"'
-        f'{profile_disabled}></label><div class="actions"><button class="button secondary" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>'
+        f'{profile_disabled}></label><div class="actions"><button class="button" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>'
     )
     bootstrap_action = (
         """
@@ -1030,6 +1091,13 @@ def _configuration_page(
       .hint strong {{ color: #dbe5f0; }}
       .profile-settings {{ margin-top: 1.5rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .32); }}
       .profile-settings summary {{ padding: 1rem 1.1rem; color: #fff; font-weight: 800; cursor: pointer; }}
+      .manager-settings {{ overflow: hidden; margin-top: 1.5rem; border: 1px solid rgba(124,227,160,.28); border-radius: 1rem; background: linear-gradient(135deg, rgba(26, 67, 51, .5), rgba(5, 12, 24, .5)); box-shadow: 0 .8rem 2rem rgba(0,0,0,.14); }}
+      .manager-settings summary {{ display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 1.2rem; color: #fff; background: rgba(124,227,160,.08); cursor: pointer; list-style: none; }}
+      .manager-settings summary::-webkit-details-marker {{ display: none; }}
+      .manager-title {{ font-size: 1.1rem; font-weight: 850; letter-spacing: -.015em; }}
+      .manager-subtitle {{ color: #9fdcb4; font-size: .76rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }}
+      .manager-settings > .profile-content {{ padding-top: 1.2rem; }}
+      .manager-settings .manager-intro {{ margin: 0; color: #c6d4c9; font-size: .9rem; line-height: 1.55; }}
       .profile-content {{ display: grid; gap: 1rem; padding: 0 1.1rem 1.1rem; }}
       .profile-content p {{ margin: 0; color: #9dacbd; font-size: .88rem; line-height: 1.5; }}
       .profile-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }}
@@ -1132,9 +1200,9 @@ def _configuration_page(
           </form>
         </details>
         <details class="manager-settings" id="download-manager"{manager_hidden}>
-          <summary>Download manager</summary>
+          <summary><span class="manager-title">Download manager</span><span class="manager-subtitle">Queue and library</span></summary>
           <div class="profile-content">
-            <p>Completed shared files are shown read-only; deletion is not available.</p>
+            <p class="manager-intro">This protected area manages active downloads. Completed shared files are read-only.</p>
             {bootstrap_action}
             {manager_auth}
             <div id="manager-feedback" class="profile-feedback" role="status"></div>
