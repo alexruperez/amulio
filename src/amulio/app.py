@@ -256,6 +256,20 @@ def _format_size(size: int) -> str:
     return f"{size / 1_000_000_000:.2f} GB"
 
 
+def _default_preferences(settings: Settings) -> ProfilePreferences:
+    """Return the node-wide defaults used by the base installation manifest."""
+    return ProfilePreferences(
+        search_languages=settings.search_languages,
+        allow_season_packs=settings.allow_season_packs,
+        result_limit=settings.default_result_limit,
+        max_size_gb=settings.default_max_size_gb or None,
+        show_stream_size=settings.default_show_stream_size,
+        show_stream_sources=settings.default_show_stream_sources,
+        show_stream_language=settings.default_show_stream_language,
+        show_stream_technical_details=settings.default_show_stream_technical_details,
+    )
+
+
 def _stream_facts(
     candidate: Candidate,
     *,
@@ -311,7 +325,7 @@ def _stream_object(
         if file_state is not None and file_state.state == "downloading"
         else "download"
     )
-    display_preferences = preferences or ProfilePreferences()
+    display_preferences = preferences or _default_preferences(settings)
     stream_label = translate(
         locale,
         {
@@ -422,14 +436,13 @@ async def _discover_candidates(
     fixture = _e2e_fixture_candidate(media_type, media_id, settings)
     if fixture is not None:
         return [fixture]
-    preferred_languages = preferences.search_languages if preferences else settings.search_languages
-    allow_season_packs = (
-        preferences.allow_season_packs if preferences else settings.allow_season_packs
-    )
-    result_limit = preferences.result_limit if preferences else 50
+    effective_preferences = preferences or _default_preferences(settings)
+    preferred_languages = effective_preferences.search_languages
+    allow_season_packs = effective_preferences.allow_season_packs
+    result_limit = effective_preferences.result_limit
     max_size_bytes = (
-        int(preferences.max_size_gb * 1_000_000_000)
-        if preferences is not None and preferences.max_size_gb is not None
+        int(effective_preferences.max_size_gb * 1_000_000_000)
+        if effective_preferences.max_size_gb is not None
         else None
     )
     cached = cache.get(media_key)

@@ -73,7 +73,7 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
     page: Page = browser.new_page(viewport={"width": 1440, "height": 900})
     page.goto(configuration_server)
 
-    install_link = page.get_by_role("link", name="Install in Stremio")
+    install_link = page.get_by_role("link", name="Open in Stremio app")
     assert (
         install_link.get_attribute("href")
         == configuration_server.replace("http://", "stremio://").removesuffix("/configure")

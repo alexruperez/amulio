@@ -51,7 +51,7 @@ def test_stremio_tokenized_configuration_url_requires_the_installation_token(mon
 
     assert configured.status_code == 200
     assert '<html lang="en">' in configured.text
-    assert "Install in Stremio" in configured.text
+    assert "Open in Stremio app" in configured.text
     assert "Copy manifest URL" in configured.text
     assert 'id="action-feedback"' in configured.text
     assert "Opening Stremio…" in configured.text
@@ -117,7 +117,7 @@ def test_configuration_hides_profile_management_when_it_is_not_enabled(monkeypat
         configured = client.get("/configure?lang=es")
 
     assert '<html lang="es">' in configured.text
-    assert "Instalar en Stremio" in configured.text
+    assert "Abrir en la app de Stremio" in configured.text
     assert "Estado de la instancia" in configured.text
     assert 'id="profile-form"' in configured.text
     assert "Ajustes del perfil" in configured.text
