@@ -774,7 +774,8 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/configure/status"
     )
-    logo_url = html.escape(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
+    # Keep this relative so Home Assistant Ingress retains its private app prefix.
+    logo_url = html.escape(f"assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
     profile_management_enabled = settings.admin_password is not None
     profile_disabled = " disabled" if not profile_management_enabled else ""
     profile_hidden = " hidden" if not profile_management_enabled else ""
@@ -871,7 +872,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
   </head>
   <body>
     <main>
-      <a class="brand" href="/configure" aria-label="{t("brand_configuration")}">
+      <a class="brand" href="configure" aria-label="{t("brand_configuration")}">
         <img src="{logo_url}" alt="{t("amule_logo")}">
         <span>aMulio</span>
       </a>
