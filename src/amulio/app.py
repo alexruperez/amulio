@@ -1285,7 +1285,7 @@ async def _stream_listing(
     }
 
 
-@app.get("/play/{token}")
+@app.api_route("/play/{token}", methods=["GET", "HEAD"])
 async def play(token: str, request: Request, api: ApiClient, cache: Cache):
     settings = _settings(request)
     await _enforce_rate_limit(
@@ -1306,6 +1306,12 @@ async def play(token: str, request: Request, api: ApiClient, cache: Cache):
 
     if candidate.local_path is not None:
         _safe_media_path(candidate.local_path, settings=settings)
+        return RedirectResponse(f"/file/{token}", status_code=307)
+
+    # Stremio probes stream URLs with HEAD before issuing GET. HEAD must not
+    # enqueue a P2P download; direct it to /file, which reports completion
+    # status without changing aMule state.
+    if request.method == "HEAD":
         return RedirectResponse(f"/file/{token}", status_code=307)
 
     queued = False
