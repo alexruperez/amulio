@@ -56,24 +56,39 @@ def _token(candidate: Candidate, settings: Settings) -> str:
 
 
 @pytest.mark.asyncio
-async def test_file_streaming_supports_head_and_byte_ranges(completed_media):
+async def test_file_streaming_supports_head_and_byte_ranges(completed_media, tmp_path):
     candidate, settings = completed_media
+    cache = CandidateCache(str(tmp_path / "cache.sqlite3"))
+    app.state.cache = cache
+    app.state.download_locks = MediaSearchLocks()
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        full = await client.get(f"/file/{_token(candidate, settings)}")
-        head = await client.head(f"/file/{_token(candidate, settings)}")
-        single_range = await client.get(
-            f"/file/{_token(candidate, settings)}", headers={"Range": "bytes=2-5"}
-        )
-        suffix_range = await client.get(
-            f"/file/{_token(candidate, settings)}", headers={"Range": "bytes=-3"}
-        )
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            full = await client.get(f"/file/{_token(candidate, settings)}")
+            head = await client.head(f"/file/{_token(candidate, settings)}")
+            play_head = await client.head(f"/play/{_token(candidate, settings)}")
+            play_head_followed = await client.head(
+                f"/play/{_token(candidate, settings)}", follow_redirects=True
+            )
+            single_range = await client.get(
+                f"/file/{_token(candidate, settings)}", headers={"Range": "bytes=2-5"}
+            )
+            suffix_range = await client.get(
+                f"/file/{_token(candidate, settings)}", headers={"Range": "bytes=-3"}
+            )
+    finally:
+        cache.close()
 
     assert full.status_code == 200
     assert full.content == b"0123456789"
     assert head.status_code == 200
     assert head.content == b""
     assert head.headers["content-length"] == "10"
+    assert play_head.status_code == 307
+    assert play_head.headers["location"].startswith("/file/")
+    assert play_head_followed.status_code == 200
+    assert play_head_followed.content == b""
+    assert play_head_followed.headers["content-length"] == "10"
     assert single_range.status_code == 206
     assert single_range.headers["content-range"] == "bytes 2-5/10"
     assert single_range.content == b"2345"

@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+import pytest
 from fastapi import Request
 
 from amulio.app import _download_details, _e2e_fixture_candidate, _stream_object, app, play
@@ -200,3 +202,48 @@ async def test_play_enqueues_a_new_download_once_and_returns_a_status_video(tmp_
     assert api.enqueued == 1
     assert responses[0].media_type == "video/mp4"
     assert responses[1].media_type == "video/mp4"
+
+
+@pytest.mark.asyncio
+async def test_play_head_never_enqueues_an_incomplete_download(tmp_path):
+    candidate = _candidate()
+
+    class FakeApi:
+        enqueued = 0
+
+        async def shared_file(self, file_hash: str):
+            assert file_hash == candidate.hash
+            return None
+
+        async def download(self, file_hash: str):
+            assert file_hash == candidate.hash
+            return None
+
+        async def add_download(self, ed2k_link: str) -> None:
+            self.enqueued += 1
+
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+    )
+    cache = CandidateCache(str(tmp_path / "cache.sqlite3"))
+    app.state.settings = settings
+    app.state.amule_api = FakeApi()
+    app.state.cache = cache
+    app.state.download_locks = MediaSearchLocks()
+    token = sign(
+        {"candidate": candidate.model_dump()},
+        secret=settings.token_secret.get_secret_value(),
+        ttl_seconds=60,
+    )
+    transport = httpx.ASGITransport(app=app)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.head(f"/play/{token}")
+    finally:
+        cache.close()
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("/file/")
+    assert app.state.amule_api.enqueued == 0
