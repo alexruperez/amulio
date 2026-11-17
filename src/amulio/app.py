@@ -218,7 +218,11 @@ def _trusted_ingress_user(request: Request, settings: Settings) -> str | None:
         client_address = ipaddress.ip_address(client_host)
     except ValueError:
         return None
-    return user_id if any(client_address in network for network in settings.trusted_ingress_proxies) else None
+    return (
+        user_id
+        if any(client_address in network for network in settings.trusted_ingress_proxies)
+        else None
+    )
 
 
 def _require_csrf(request: Request) -> None:
@@ -932,11 +936,11 @@ def _configuration_page(
     manager_hidden = " hidden" if settings.admin_password is None and not ingress_sso else ""
     manager_auth = (
         "<p>Home Assistant Ingress authorizes this manager session.</p>"
-        "<div class=\"actions\"><button class=\"button secondary\" type=\"button\" id=\"manager-load\">Open download manager</button></div>"
+        '<div class="actions"><button class="button secondary" type="button" id="manager-load">Open download manager</button></div>'
         if ingress_sso
-        else "<label for=\"manager-password\">Administrator password"
-        "<input id=\"manager-password\" type=\"password\" autocomplete=\"current-password\""
-        f"{profile_disabled}></label><div class=\"actions\"><button class=\"button secondary\" type=\"button\" id=\"manager-load\"{profile_disabled}>Load queue and library</button></div>"
+        else '<label for="manager-password">Administrator password'
+        '<input id="manager-password" type="password" autocomplete="current-password"'
+        f'{profile_disabled}></label><div class="actions"><button class="button secondary" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>'
     )
     bootstrap_action = (
         """

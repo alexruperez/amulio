@@ -24,9 +24,12 @@ def test_ingress_sso_requires_a_trusted_proxy_and_identity_header(monkeypatch):
         assert trusted.post("/admin/profiles").status_code == 403
 
     with TestClient(app, client=("198.51.100.8", 4567)) as untrusted:
-        assert untrusted.post(
-            "/admin/ingress-session", headers={"X-Remote-User-ID": "spoofed"}
-        ).status_code == 401
+        assert (
+            untrusted.post(
+                "/admin/ingress-session", headers={"X-Remote-User-ID": "spoofed"}
+            ).status_code
+            == 401
+        )
 
     with TestClient(app, client=("172.30.32.2", 4567)) as missing_header:
         assert missing_header.post("/admin/ingress-session").status_code == 401
