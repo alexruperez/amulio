@@ -1,4 +1,5 @@
 from functools import lru_cache
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
@@ -29,6 +30,9 @@ class Settings(BaseSettings):
         default=None, validation_alias="AMULIO_ADMIN_BOOTSTRAP_TOKEN_FILE"
     )
     admin_session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
+    trusted_ingress_proxy_sources: str = Field(
+        default="", validation_alias="AMULIO_TRUSTED_INGRESS_PROXY_SOURCES"
+    )
     metrics_token: SecretStr | None = Field(default=None, min_length=24)
     allowed_media_roots: str = "/data/incoming"
     database_path: str = "data/amulio.sqlite3"
@@ -122,6 +126,18 @@ class Settings(BaseSettings):
     @property
     def media_roots(self) -> tuple[str, ...]:
         return tuple(root.strip() for root in self.allowed_media_roots.split(",") if root.strip())
+
+    @property
+    def trusted_ingress_proxies(self) -> tuple[IPv4Network | IPv6Network, ...]:
+        sources = tuple(
+            source.strip()
+            for source in self.trusted_ingress_proxy_sources.split(",")
+            if source.strip()
+        )
+        try:
+            return tuple(ip_network(source, strict=False) for source in sources)
+        except ValueError as exc:
+            raise ValueError("AMULIO_TRUSTED_INGRESS_PROXY_SOURCES must be IPs or CIDRs") from exc
 
     @property
     def search_languages(self) -> tuple[str, ...]:

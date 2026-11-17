@@ -171,6 +171,14 @@ link private; do not put the token in a query string, environment dump, logs,
 or manifest. Direct `/configure` access should remain protected by the
 deployment's normal authentication where required.
 
+Home Assistant Ingress can instead use trusted SSO by setting
+`AMULIO_TRUSTED_INGRESS_PROXY_SOURCES` to the exact Supervisor proxy IP or CIDR.
+Only requests originating from one of those sources **and** carrying a non-empty
+`X-Remote-User-ID` can call `/admin/ingress-session`; a direct or public request
+never trusts that header. The resulting session uses the same HttpOnly,
+SameSite=Strict cookie and CSRF guard. Leave this setting empty outside a trusted
+Ingress wrapper and retain the password/bootstrap recovery flow above.
+
 Each profile has a separate, revocable Stremio manifest URL. Its preferences
 apply to discovery and ranking without exposing aMule credentials. The original
 instance manifest remains available for existing installations.
