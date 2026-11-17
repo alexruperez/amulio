@@ -81,6 +81,11 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
         + "/manifest.json"
     )
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    tip_box = page.locator(".hint").bounding_box()
+    manager_box = page.locator("#download-manager").bounding_box()
+    assert tip_box is not None and manager_box is not None
+    assert manager_box["y"] >= tip_box["y"] + tip_box["height"] + 20
+    expect(page.locator("#download-manager summary")).to_contain_text("Queue and library")
 
     page.goto(configuration_server + "#admin-bootstrap=" + "b" * 32)
     page.locator("#download-manager summary").click()
