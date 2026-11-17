@@ -680,7 +680,9 @@ class DownloadSelectionRequest(BaseModel):
         try:
             return normalize_hashes(self.hashes)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            ) from exc
 
 
 class DownloadStatusRequest(DownloadSelectionRequest):
@@ -748,7 +750,9 @@ async def managed_downloads(request: Request, api: ApiClient):
     try:
         downloads, shared = await asyncio.gather(api.downloads(), api.shared_files())
         return {
-            "downloads": [public_download(item) for item in downloads if item.get("status") != "completed"],
+            "downloads": [
+                public_download(item) for item in downloads if item.get("status") != "completed"
+            ],
             "shared": [public_shared_file(item) for item in shared],
         }
     except (AmuleApiError, ValueError) as exc:
@@ -756,9 +760,7 @@ async def managed_downloads(request: Request, api: ApiClient):
 
 
 @app.patch("/admin/downloads")
-async def manage_download_status(
-    body: DownloadStatusRequest, request: Request, api: ApiClient
-):
+async def manage_download_status(body: DownloadStatusRequest, request: Request, api: ApiClient):
     _require_csrf(request)
     hashes = body.normalized_hashes()
     if body.action not in {"pause", "resume"}:
@@ -777,9 +779,7 @@ async def manage_download_status(
 
 
 @app.delete("/admin/downloads")
-async def cancel_managed_downloads(
-    body: DownloadCancelRequest, request: Request, api: ApiClient
-):
+async def cancel_managed_downloads(body: DownloadCancelRequest, request: Request, api: ApiClient):
     """Cancel only active aMule partfiles; completed shared files are never deleted."""
     _require_csrf(request)
     hashes = body.normalized_hashes()
