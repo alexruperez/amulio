@@ -23,6 +23,12 @@ from pydantic import BaseModel, SecretStr
 from amulio.amule_api import AmuleApiClient, AmuleApiError
 from amulio.cache import CandidateCache, FileState
 from amulio.config import Settings, get_settings
+from amulio.download_manager import (
+    normalize_hashes,
+    public_download,
+    public_shared_file,
+    require_active_selection,
+)
 from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.i18n import Locale, resolve_locale, translate
 from amulio.local_media import discover_local_media
@@ -667,6 +673,26 @@ class AdminSessionResponse(BaseModel):
     expires_in_seconds: int
 
 
+class DownloadSelectionRequest(BaseModel):
+    hashes: list[str]
+
+    def normalized_hashes(self) -> list[str]:
+        try:
+            return normalize_hashes(self.hashes)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            ) from exc
+
+
+class DownloadStatusRequest(DownloadSelectionRequest):
+    action: str
+
+
+class DownloadCancelRequest(DownloadSelectionRequest):
+    confirmation: str
+
+
 class ProfileInstallationResponse(BaseModel):
     manifest_url: str
 
@@ -715,6 +741,56 @@ async def create_admin_session(
 async def delete_admin_session(request: Request, response: Response) -> None:
     _require_csrf(request)
     response.delete_cookie("amulio_admin", path="/admin", httponly=True, samesite="strict")
+
+
+@app.get("/admin/downloads")
+async def managed_downloads(request: Request, api: ApiClient):
+    """List queue and shared library for a verified administrator only."""
+    _require_admin_session(request)
+    try:
+        downloads, shared = await asyncio.gather(api.downloads(), api.shared_files())
+        return {
+            "downloads": [
+                public_download(item) for item in downloads if item.get("status") != "completed"
+            ],
+            "shared": [public_shared_file(item) for item in shared],
+        }
+    except (AmuleApiError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="aMule queue is unavailable") from exc
+
+
+@app.patch("/admin/downloads")
+async def manage_download_status(body: DownloadStatusRequest, request: Request, api: ApiClient):
+    _require_csrf(request)
+    hashes = body.normalized_hashes()
+    if body.action not in {"pause", "resume"}:
+        raise HTTPException(status_code=422, detail="action must be pause or resume")
+    try:
+        downloads = await api.downloads()
+        require_active_selection(hashes, downloads)
+        results = (
+            await api.pause_downloads(hashes)
+            if body.action == "pause"
+            else await api.resume_downloads(hashes)
+        )
+    except AmuleApiError as exc:
+        raise HTTPException(status_code=503, detail="aMule queue update failed") from exc
+    return {"results": results}
+
+
+@app.delete("/admin/downloads")
+async def cancel_managed_downloads(body: DownloadCancelRequest, request: Request, api: ApiClient):
+    """Cancel only active aMule partfiles; completed shared files are never deleted."""
+    _require_csrf(request)
+    hashes = body.normalized_hashes()
+    if not secrets.compare_digest(body.confirmation, f"CANCELAR {len(hashes)}"):
+        raise HTTPException(status_code=422, detail="Type the exact cancellation confirmation")
+    try:
+        downloads = await api.downloads()
+        require_active_selection(hashes, downloads)
+        return {"results": await api.cancel_downloads(hashes)}
+    except AmuleApiError as exc:
+        raise HTTPException(status_code=503, detail="aMule cancellation failed") from exc
 
 
 @app.post("/admin/profiles", response_model=AddonProfile, status_code=status.HTTP_201_CREATED)
@@ -967,6 +1043,28 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             <div class="profile-feedback" id="profile-feedback" role="status"></div>
           </form>
         </details>
+        <details class="manager-settings" id="download-manager"{profile_hidden}>
+          <summary>Download manager</summary>
+          <div class="profile-content">
+            <p>Queue controls require the administrator password. Completed shared files are shown read-only; deletion is not available.</p>
+            <label for="manager-password">Administrator password
+              <input id="manager-password" type="password" autocomplete="current-password"{profile_disabled}>
+            </label>
+            <div class="actions"><button class="button secondary" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>
+            <div id="manager-feedback" class="profile-feedback" role="status"></div>
+            <form id="manager-form" hidden>
+              <div id="manager-downloads"></div>
+              <label for="manager-confirmation">To cancel selected downloads, type <code>CANCELAR N</code> using the selected count.</label>
+              <input id="manager-confirmation" type="text" autocomplete="off">
+              <div class="actions">
+                <button class="button secondary" type="button" data-manager-action="pause">Pause selected</button>
+                <button class="button secondary" type="button" data-manager-action="resume">Resume selected</button>
+                <button class="button" type="button" data-manager-action="cancel">Cancel selected</button>
+              </div>
+            </form>
+            <h3>Completed shared library</h3><div id="manager-shared"></div>
+          </div>
+        </details>
       </section>
       <footer>{t("footer")}</footer>
     </main>
@@ -1077,6 +1175,59 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           profileSubmit.textContent = "{t("create_profile")}";
         }}
       }});
+      const managerLoad = document.getElementById("manager-load");
+      const managerPassword = document.getElementById("manager-password");
+      const managerFeedback = document.getElementById("manager-feedback");
+      const managerForm = document.getElementById("manager-form");
+      const managerDownloads = document.getElementById("manager-downloads");
+      const managerShared = document.getElementById("manager-shared");
+      const managerConfirmation = document.getElementById("manager-confirmation");
+      let managerCsrf = null;
+      const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
+      const selectedDownloads = () => Array.from(document.querySelectorAll(".manager-download:checked")).map((input) => input.value);
+      function renderManager(data) {{
+        managerDownloads.innerHTML = data.downloads.length ? data.downloads.map((item) => `<label class="checkbox-label"><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}">${{managerEscape(item.name)}} — ${{managerEscape(item.status)}} (${{item.size_done}} / ${{item.size}} bytes)</label>`).join("") : "<p>No active downloads.</p>";
+        managerShared.innerHTML = data.shared.length ? `<ul>${{data.shared.map((item) => `<li>${{managerEscape(item.name)}} (${{item.size}} bytes)</li>`).join("")}}</ul>` : "<p>No completed shared files.</p>";
+        managerForm.hidden = false;
+      }}
+      async function loadManager() {{
+        const response = await fetch("/admin/downloads", {{ cache: "no-store" }});
+        if (!response.ok) throw new Error("queue");
+        renderManager(await response.json());
+      }}
+      managerLoad?.addEventListener("click", async () => {{
+        managerFeedback.textContent = "";
+        try {{
+          const login = await fetch("/admin/session", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }});
+          if (!login.ok) throw new Error("login");
+          managerCsrf = (await login.json()).csrf_token;
+          managerPassword.value = "";
+          await loadManager();
+          managerFeedback.dataset.kind = "success";
+          managerFeedback.textContent = "Queue loaded.";
+        }} catch {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = "Could not authenticate or load the queue.";
+        }}
+      }});
+      document.querySelectorAll("[data-manager-action]").forEach((button) => button.addEventListener("click", async () => {{
+        const hashes = selectedDownloads();
+        const action = button.dataset.managerAction;
+        if (!managerCsrf || !hashes.length) {{ managerFeedback.textContent = "Select at least one active download."; return; }}
+        const options = {{ method: action === "cancel" ? "DELETE" : "PATCH", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }} }};
+        options.body = JSON.stringify(action === "cancel" ? {{ hashes, confirmation: managerConfirmation.value }} : {{ hashes, action }});
+        try {{
+          const response = await fetch("/admin/downloads", options);
+          if (!response.ok) throw new Error("mutation");
+          managerConfirmation.value = "";
+          await loadManager();
+          managerFeedback.dataset.kind = "success";
+          managerFeedback.textContent = `${{action}} request completed.`;
+        }} catch {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = action === "cancel" ? "Cancellation failed. Type the exact CANCELAR N confirmation and refresh selections." : "Queue update failed; refresh selections.";
+        }}
+      }}));
     </script>
   </body>
 </html>"""
