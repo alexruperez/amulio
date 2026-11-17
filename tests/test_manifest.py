@@ -76,6 +76,21 @@ def test_configuration_page_serves_the_amule_logo(monkeypatch):
     get_settings.cache_clear()
 
 
+def test_configuration_uses_relative_navigation_and_logo_paths_for_ingress(monkeypatch):
+    monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
+    monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
+    monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        configured = client.get("/configure")
+
+    assert 'href="configure"' in configured.text
+    assert f'src="assets/amule-logo.png?v={AMULE_LOGO_VERSION}"' in configured.text
+    assert f'src="/assets/amule-logo.png?v={AMULE_LOGO_VERSION}"' not in configured.text
+    get_settings.cache_clear()
+
+
 def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
     monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
     monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
