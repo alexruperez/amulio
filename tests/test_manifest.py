@@ -83,7 +83,7 @@ def test_configuration_page_can_be_rendered_in_spanish(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_configuration_explains_when_profile_management_is_disabled(monkeypatch):
+def test_configuration_hides_profile_management_when_it_is_not_enabled(monkeypatch):
     monkeypatch.setenv("AMULIO_INSTALL_TOKEN", "i" * 24)
     monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
     monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
@@ -94,8 +94,8 @@ def test_configuration_explains_when_profile_management_is_disabled(monkeypatch)
     with TestClient(app) as client:
         configured = client.get("/configure")
 
-    assert "Profile management is disabled." in configured.text
-    assert 'id="profile-submit" disabled' in configured.text
+    assert '<details class="profile-settings" hidden>' in configured.text
+    assert "Profile management is disabled." not in configured.text
     get_settings.cache_clear()
 
     with TestClient(app) as client:
@@ -132,6 +132,7 @@ def test_configuration_readiness_is_private_and_exposes_only_safe_connection_sta
     monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
     monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
     monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(tmp_path))
+    monkeypatch.setenv("AMULIO_INBOUND_PEER_PORTS_ENABLED", "false")
     get_settings.cache_clear()
 
     with TestClient(app) as client:
@@ -145,6 +146,7 @@ def test_configuration_readiness_is_private_and_exposes_only_safe_connection_sta
         "amuleapi": "connected",
         "ed2k": "connected",
         "kad": "connecting",
+        "peer_access": "limited",
         "incoming_storage": "ready",
         "public_url": "configured",
     }

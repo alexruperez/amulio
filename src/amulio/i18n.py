@@ -20,6 +20,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "amuleapi": "amuleapi",
         "ed2k": "eD2K",
         "kad": "Kad",
+        "peer_access": "Inbound peers",
         "incoming_storage": "Incoming storage",
         "public_url": "Public URL",
         "checking": "Checking…",
@@ -46,6 +47,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "disconnected": "Disconnected",
         "ready": "Ready",
         "configured": "Configured",
+        "limited": "Limited",
         "unavailable": "Unavailable",
         "unknown": "Unknown",
         "language": "Language",
@@ -94,6 +96,9 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "readiness_hint_connecting": (
             "Kad is still connecting; remote results can take a few minutes to appear."
         ),
+        "readiness_hint_limited": (
+            "Inbound peer ports are disabled; Low ID and firewalled Kad are expected."
+        ),
         "readiness_hint_unavailable": (
             "aMule is unavailable. Check the daemon and its private amuleapi connection."
         ),
@@ -116,6 +121,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "amuleapi": "amuleapi",
         "ed2k": "eD2K",
         "kad": "Kad",
+        "peer_access": "Pares entrantes",
         "incoming_storage": "Almacenamiento Incoming",
         "public_url": "URL pública",
         "checking": "Comprobando…",
@@ -142,6 +148,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "disconnected": "Desconectado",
         "ready": "Listo",
         "configured": "Configurada",
+        "limited": "Limitado",
         "unavailable": "No disponible",
         "unknown": "Desconocido",
         "language": "Idioma",
@@ -189,6 +196,10 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         ),
         "readiness_hint_connecting": (
             "Kad sigue conectando; los resultados remotos pueden tardar unos minutos en aparecer."
+        ),
+        "readiness_hint_limited": (
+            "Los puertos de pares entrantes están desactivados; se espera Low ID y Kad "
+            "con firewall."
         ),
         "readiness_hint_unavailable": (
             "aMule no está disponible. Comprueba el daemon y su conexión privada con amuleapi."

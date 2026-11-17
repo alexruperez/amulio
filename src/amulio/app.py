@@ -628,6 +628,13 @@ async def configuration_status(installation_token: str, request: Request, api: A
         "amuleapi": "connected" if amule_status else "unavailable",
         "ed2k": _connection_state(amule_status.get("ed2k")),
         "kad": _connection_state(amule_status.get("kad")),
+        "peer_access": (
+            "configured"
+            if settings.inbound_peer_ports_enabled is True
+            else "limited"
+            if settings.inbound_peer_ports_enabled is False
+            else "unknown"
+        ),
         "incoming_storage": "ready" if storage_ready else "unavailable",
         "public_url": "configured",
     }
@@ -770,6 +777,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
     logo_url = html.escape(f"/assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
     profile_management_enabled = settings.admin_password is not None
     profile_disabled = " disabled" if not profile_management_enabled else ""
+    profile_hidden = " hidden" if not profile_management_enabled else ""
 
     def t(key: str) -> str:
         return html.escape(translate(locale, key))
@@ -783,6 +791,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
                 "disconnected",
                 "ready",
                 "configured",
+                "limited",
                 "unavailable",
                 "unknown",
             )
@@ -820,12 +829,13 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       .intro {{ max-width: 40rem; margin: 1.25rem 0 2rem; color: #b9c5d4; font-size: 1.08rem; line-height: 1.65; }}
       .readiness {{ margin: 0 0 2rem; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .38); }}
       .readiness h2 {{ margin: 0 0 .8rem; color: #fff; font-size: .9rem; }}
-      .status-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: .55rem; }}
+      .status-grid {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: .55rem; }}
       .status {{ min-width: 0; padding: .65rem; border-radius: .65rem; background: rgba(255,255,255,.055); }}
       .status-label {{ display: block; overflow: hidden; color: #9dacbd; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }}
       .status-value {{ display: block; overflow: hidden; margin-top: .25rem; color: #e3ebf4; font-size: .78rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }}
       .status[data-state="connected"] .status-value, .status[data-state="ready"] .status-value, .status[data-state="configured"] .status-value {{ color: #8eeaac; }}
       .status[data-state="connecting"] .status-value {{ color: #f7d978; }}
+      .status[data-state="limited"] .status-value {{ color: #f7d978; }}
       .status[data-state="unavailable"] .status-value, .status[data-state="disconnected"] .status-value {{ color: #f0a0a0; }}
       .readiness-hint {{ margin: .8rem 0 0; color: #9dacbd; font-size: .82rem; line-height: 1.5; }}
       .features {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin: 0 0 2rem; }}
@@ -876,6 +886,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             <div class="status" data-key="amuleapi"><span class="status-label">{t("amuleapi")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="ed2k"><span class="status-label">{t("ed2k")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="kad"><span class="status-label">{t("kad")}</span><span class="status-value">{t("checking")}</span></div>
+            <div class="status" data-key="peer_access"><span class="status-label">{t("peer_access")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="incoming_storage"><span class="status-label">{t("incoming_storage")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="public_url"><span class="status-label">{t("public_url")}</span><span class="status-value">{t("checking")}</span></div>
           </div>
@@ -894,11 +905,11 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         </div>
         <p class="action-feedback" id="action-feedback" role="status" aria-live="polite"></p>
         <p class="hint"><strong>{t("tip_label")}</strong> {t("tip")}</p>
-        <details class="profile-settings">
+        <details class="profile-settings"{profile_hidden}>
           <summary>{t("profile_settings")}</summary>
           <form class="profile-content" id="profile-form">
             <p>{t("profile_intro")}</p>
-            {f'<p class="profile-feedback" data-kind="error">{t("profile_management_disabled")}</p>' if not profile_management_enabled else ""}
+
             <label for="admin-password">{t("admin_password")}
               <input id="admin-password" name="password" type="password" autocomplete="current-password" required{profile_disabled}>
             </label>
@@ -957,7 +968,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       const readiness = document.getElementById("readiness");
       const readinessHint = document.getElementById("readiness-hint");
       const statusLabels = {status_labels};
-      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
+      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_limited", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
       function setActionFeedback(message, kind) {{
         actionFeedback.textContent = message;
         actionFeedback.dataset.kind = kind;
@@ -992,6 +1003,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           if (states.amuleapi !== "connected") hints.push(readinessMessages.readiness_hint_unavailable);
           if (states.ed2k === "disconnected") hints.push(readinessMessages.readiness_hint_disconnected);
           if (states.kad === "connecting") hints.push(readinessMessages.readiness_hint_connecting);
+          if (states.peer_access === "limited") hints.push(readinessMessages.readiness_hint_limited);
           readinessHint.textContent = hints.length ? hints.join(" ") : readinessMessages.readiness_hint_ready;
         }})
         .catch(() => {{
