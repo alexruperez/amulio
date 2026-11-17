@@ -668,9 +668,36 @@ class AdminLoginRequest(BaseModel):
     password: SecretStr
 
 
+class AdminBootstrapRequest(BaseModel):
+    token: SecretStr
+
+
 class AdminSessionResponse(BaseModel):
     csrf_token: str
     expires_in_seconds: int
+
+
+def _establish_admin_session(response: Response, settings: Settings) -> AdminSessionResponse:
+    """Set an HttpOnly, CSRF-bound administrative session after authentication."""
+    csrf_token = secrets.token_urlsafe(32)
+    session_token = sign(
+        {"scope": "admin", "csrf": csrf_token},
+        secret=settings.token_secret.get_secret_value(),
+        ttl_seconds=settings.admin_session_ttl_seconds,
+    )
+    response.set_cookie(
+        "amulio_admin",
+        session_token,
+        max_age=settings.admin_session_ttl_seconds,
+        httponly=True,
+        secure=str(settings.public_url).startswith("https://"),
+        samesite="strict",
+        path="/admin",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return AdminSessionResponse(
+        csrf_token=csrf_token, expires_in_seconds=settings.admin_session_ttl_seconds
+    )
 
 
 class DownloadSelectionRequest(BaseModel):
@@ -716,25 +743,29 @@ async def create_admin_session(
         credentials.password.get_secret_value(), settings.admin_password.get_secret_value()
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    csrf_token = secrets.token_urlsafe(32)
-    session_token = sign(
-        {"scope": "admin", "csrf": csrf_token},
-        secret=settings.token_secret.get_secret_value(),
-        ttl_seconds=settings.admin_session_ttl_seconds,
+    return _establish_admin_session(response, settings)
+
+
+@app.post("/admin/bootstrap", response_model=AdminSessionResponse)
+async def bootstrap_admin_session(
+    credentials: AdminBootstrapRequest, request: Request, response: Response
+) -> AdminSessionResponse:
+    """Bootstrap an admin session from an operator-supplied secret."""
+    settings = _settings(request)
+    if settings.admin_password is None or settings.admin_bootstrap_token is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await _enforce_rate_limit(
+        request,
+        route="admin-bootstrap",
+        subject="admin",
+        limit=settings.admin_bootstrap_rate_limit,
+        settings=settings,
     )
-    response.set_cookie(
-        "amulio_admin",
-        session_token,
-        max_age=settings.admin_session_ttl_seconds,
-        httponly=True,
-        secure=str(settings.public_url).startswith("https://"),
-        samesite="strict",
-        path="/admin",
-    )
-    response.headers["Cache-Control"] = "no-store"
-    return AdminSessionResponse(
-        csrf_token=csrf_token, expires_in_seconds=settings.admin_session_ttl_seconds
-    )
+    if not secrets.compare_digest(
+        credentials.token.get_secret_value(), settings.admin_bootstrap_token.get_secret_value()
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return _establish_admin_session(response, settings)
 
 
 @app.delete("/admin/session", status_code=status.HTTP_204_NO_CONTENT)
@@ -868,6 +899,18 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
     profile_management_enabled = settings.admin_password is not None
     profile_disabled = " disabled" if not profile_management_enabled else ""
     profile_hidden = " hidden" if not profile_management_enabled else ""
+    bootstrap_action = (
+        """
+            <div id="manager-bootstrap">
+              <p>Open the admin manager with an operator-provided management link. Its bootstrap token stays in the URL fragment and is never included in a request URL.</p>
+              <div class="actions">
+                <button class="button secondary" type="button" id="manager-bootstrap-open">Open admin manager</button>
+                <button class="button secondary" type="button" id="manager-bootstrap-copy">Copy management link</button>
+              </div>
+            </div>"""
+        if settings.admin_password is not None and settings.admin_bootstrap_token is not None
+        else ""
+    )
 
     def t(key: str) -> str:
         return html.escape(translate(locale, key))
@@ -1047,6 +1090,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           <summary>Download manager</summary>
           <div class="profile-content">
             <p>Queue controls require the administrator password. Completed shared files are shown read-only; deletion is not available.</p>
+            {bootstrap_action}
             <label for="manager-password">Administrator password
               <input id="manager-password" type="password" autocomplete="current-password"{profile_disabled}>
             </label>
@@ -1136,14 +1180,14 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         profileSubmit.textContent = "{t("creating_profile")}";
         profileFeedback.textContent = "";
         try {{
-          const login = await fetch("/admin/session", {{
+          const login = await fetch("../admin/session", {{
             method: "POST", headers: {{ "Content-Type": "application/json" }},
             body: JSON.stringify({{ password }})
           }});
           if (login.status === 404) throw new Error("disabled");
           if (!login.ok) throw new Error("login");
           const session = await login.json();
-          const profile = await fetch("/admin/profiles", {{
+          const profile = await fetch("../admin/profiles", {{
             method: "POST", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": session.csrf_token }},
             body: JSON.stringify({{
               ui_language: form.get("ui_language"), search_languages: searchLanguages,
@@ -1158,7 +1202,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
           }});
           if (!profile.ok) throw new Error("profile");
           const created = await profile.json();
-          const installation = await fetch(`/admin/profiles/${{created.id}}/installation`);
+          const installation = await fetch(`../admin/profiles/${{created.id}}/installation`);
           if (!installation.ok) throw new Error("installation");
           manifestUrl = (await installation.json()).manifest_url;
           manifestElement.textContent = manifestUrl;
@@ -1176,6 +1220,8 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         }}
       }});
       const managerLoad = document.getElementById("manager-load");
+      const managerBootstrapOpen = document.getElementById("manager-bootstrap-open");
+      const managerBootstrapCopy = document.getElementById("manager-bootstrap-copy");
       const managerPassword = document.getElementById("manager-password");
       const managerFeedback = document.getElementById("manager-feedback");
       const managerForm = document.getElementById("manager-form");
@@ -1191,14 +1237,61 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         managerForm.hidden = false;
       }}
       async function loadManager() {{
-        const response = await fetch("/admin/downloads", {{ cache: "no-store" }});
+        const response = await fetch("../admin/downloads", {{ cache: "no-store" }});
         if (!response.ok) throw new Error("queue");
         renderManager(await response.json());
       }}
+      function bootstrapTokenFromFragment() {{
+        return new URLSearchParams(window.location.hash.slice(1)).get("admin-bootstrap");
+      }}
+      managerBootstrapCopy?.addEventListener("click", async () => {{
+        if (!bootstrapTokenFromFragment()) {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = "Open the operator-provided management link first.";
+          return;
+        }}
+        try {{
+          await navigator.clipboard.writeText(window.location.href);
+          managerFeedback.dataset.kind = "success";
+          managerFeedback.textContent = "Management link copied. Its token remains in the URL fragment.";
+        }} catch {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = "Could not copy the management link.";
+        }}
+      }});
+      managerBootstrapOpen?.addEventListener("click", async () => {{
+        const token = bootstrapTokenFromFragment();
+        if (!token) {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = "Open the operator-provided management link first.";
+          return;
+        }}
+        managerBootstrapOpen.disabled = true;
+        managerFeedback.textContent = "";
+        // Fragments are not sent in HTTP requests or Referer headers. Remove it
+        // before processing the response so it cannot be copied accidentally later.
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        try {{
+          const login = await fetch("../admin/bootstrap", {{
+            method: "POST", headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ token }})
+          }});
+          if (!login.ok) throw new Error("bootstrap");
+          managerCsrf = (await login.json()).csrf_token;
+          await loadManager();
+          managerFeedback.dataset.kind = "success";
+          managerFeedback.textContent = "Admin manager opened.";
+        }} catch {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = "Could not open the admin manager.";
+        }} finally {{
+          managerBootstrapOpen.disabled = false;
+        }}
+      }});
       managerLoad?.addEventListener("click", async () => {{
         managerFeedback.textContent = "";
         try {{
-          const login = await fetch("/admin/session", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }});
+          const login = await fetch("../admin/session", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }});
           if (!login.ok) throw new Error("login");
           managerCsrf = (await login.json()).csrf_token;
           managerPassword.value = "";
@@ -1217,7 +1310,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
         const options = {{ method: action === "cancel" ? "DELETE" : "PATCH", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }} }};
         options.body = JSON.stringify(action === "cancel" ? {{ hashes, confirmation: managerConfirmation.value }} : {{ hashes, action }});
         try {{
-          const response = await fetch("/admin/downloads", options);
+          const response = await fetch("../admin/downloads", options);
           if (!response.ok) throw new Error("mutation");
           managerConfirmation.value = "";
           await loadManager();

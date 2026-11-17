@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     admin_password_file: str | None = Field(
         default=None, validation_alias="AMULIO_ADMIN_PASSWORD_FILE"
     )
+    admin_bootstrap_token: SecretStr | None = Field(
+        default=None, min_length=24, validation_alias="AMULIO_ADMIN_BOOTSTRAP_TOKEN"
+    )
+    admin_bootstrap_token_file: str | None = Field(
+        default=None, validation_alias="AMULIO_ADMIN_BOOTSTRAP_TOKEN_FILE"
+    )
     admin_session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
     metrics_token: SecretStr | None = Field(default=None, min_length=24)
     allowed_media_roots: str = "/data/incoming"
@@ -64,6 +70,7 @@ class Settings(BaseSettings):
     negative_candidate_ttl_seconds: int = Field(default=120, ge=10, le=3600)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     admin_login_rate_limit: int = Field(default=10, ge=1, le=100)
+    admin_bootstrap_rate_limit: int = Field(default=5, ge=1, le=100)
     manifest_rate_limit: int = Field(default=30, ge=1, le=10_000)
     stream_rate_limit: int = Field(default=30, ge=1, le=10_000)
     playback_rate_limit: int = Field(default=600, ge=1, le=100_000)
@@ -81,6 +88,16 @@ class Settings(BaseSettings):
             if len(admin_password) < 16:
                 raise ValueError("AMULIO_ADMIN_PASSWORD_FILE must contain at least 16 characters")
             self.admin_password = SecretStr(admin_password)
+        if self.admin_bootstrap_token is None and self.admin_bootstrap_token_file:
+            bootstrap_token = self._read_secret_file(
+                self.admin_bootstrap_token_file,
+                variable="AMULIO_ADMIN_BOOTSTRAP_TOKEN_FILE",
+            )
+            if len(bootstrap_token) < 24:
+                raise ValueError(
+                    "AMULIO_ADMIN_BOOTSTRAP_TOKEN_FILE must contain at least 24 characters"
+                )
+            self.admin_bootstrap_token = SecretStr(bootstrap_token)
         if self.amule_api_admin_password is None:
             if not self.amule_api_admin_password_file:
                 raise ValueError("Set AMULE_API_ADMIN_PASSWORD or AMULE_API_ADMIN_PASSWORD_FILE")

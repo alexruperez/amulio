@@ -160,6 +160,17 @@ creates short-lived `HttpOnly`, `SameSite=Strict` sessions and requires a CSRF
 token for every profile mutation. Do not reuse the manifest token or the aMule
 EC password for this value.
 
+For deployments that need an operator to establish an admin session without
+entering the admin password, also mount a distinct high-entropy token at
+`AMULIO_ADMIN_BOOTSTRAP_TOKEN_FILE`. Bootstrap is disabled unless both that file
+and the admin password are configured. An operator can open `/configure` with
+`#admin-bootstrap=<token>` appended: the fragment is not sent in HTTP requests
+or referrer headers, and the page posts it only to the rate-limited
+`/admin/bootstrap` endpoint before clearing the fragment. Keep that management
+link private; do not put the token in a query string, environment dump, logs,
+or manifest. Direct `/configure` access should remain protected by the
+deployment's normal authentication where required.
+
 Each profile has a separate, revocable Stremio manifest URL. Its preferences
 apply to discovery and ranking without exposing aMule credentials. The original
 instance manifest remains available for existing installations.
