@@ -31,15 +31,16 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "ready_title": "Ready to watch",
         "ready_body": "Completed media plays directly in Stremio.",
         "manifest_label": "Your Stremio manifest URL",
-        "install": "Install in Stremio",
+        "install": "Open in Stremio app",
         "copy": "Copy manifest URL",
         "copied": "Copied!",
         "copy_failed": "Copy failed — select the URL",
         "install_feedback": "Opening Stremio…",
         "tip_label": "Tip:",
         "tip": (
-            "if Stremio does not open automatically, copy this URL and paste it into "
-            "Stremio's addon search. Keep it private."
+            "this opens a Stremio deep link when the current device supports it. Otherwise, "
+            "copy this URL and paste it into Stremio's addon manager. Mobile clients require "
+            "an HTTPS public URL. Keep it private."
         ),
         "footer": "aMulio is a self-hosted Stremio addon powered by aMule.",
         "connected": "Connected",
@@ -132,15 +133,16 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "ready_title": "Listo para ver",
         "ready_body": "El contenido completado se reproduce directamente en Stremio.",
         "manifest_label": "Tu URL de manifest de Stremio",
-        "install": "Instalar en Stremio",
+        "install": "Abrir en la app de Stremio",
         "copy": "Copiar URL del manifest",
         "copied": "¡Copiado!",
         "copy_failed": "No se pudo copiar — selecciona la URL",
         "install_feedback": "Abriendo Stremio…",
         "tip_label": "Consejo:",
         "tip": (
-            "si Stremio no se abre automáticamente, copia esta URL y pégala en el "
-            "buscador de addons de Stremio. Mantenla privada."
+            "abre un enlace profundo de Stremio si el dispositivo actual lo admite. Si no, copia "
+            "esta URL y pégala en el gestor de addons de Stremio. Los clientes móviles requieren "
+            "una URL pública HTTPS. Mantenla privada."
         ),
         "footer": "aMulio es un addon autoalojado de Stremio impulsado por aMule.",
         "connected": "Conectado",

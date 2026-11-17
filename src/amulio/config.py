@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     allowed_video_extensions: str = ".avi,.m4v,.mkv,.mov,.mp4,.mpeg,.mpg,.ts,.webm"
     denied_file_extensions: str = ".exe,.iso,.rar,.zip"
     allow_season_packs: bool = False
+    default_result_limit: int = Field(default=50, ge=1, le=50)
+    # Zero intentionally means unlimited in the Home Assistant app form.
+    default_max_size_gb: float = Field(default=0, ge=0, le=100)
+    default_show_stream_size: bool = True
+    default_show_stream_sources: bool = True
+    default_show_stream_language: bool = True
+    default_show_stream_technical_details: bool = True
     # This is declarative, not a NAT probe. It lets the readiness UI state
     # the expected reachability when an installation intentionally does not
     # expose aMule's optional inbound peer ports.

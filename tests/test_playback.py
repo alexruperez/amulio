@@ -136,6 +136,27 @@ def test_stream_display_preferences_hide_optional_file_facts():
     assert stream["description"] == candidate.name
 
 
+def test_base_manifest_uses_node_wide_stream_display_defaults():
+    settings = Settings(
+        install_token="i" * 24,
+        token_secret="s" * 32,
+        AMULE_API_ADMIN_PASSWORD="test-password",
+        default_show_stream_size=False,
+        default_show_stream_sources=False,
+        default_show_stream_language=False,
+        default_show_stream_technical_details=False,
+    )
+    app.state.settings = settings
+    request = type("Request", (), {"app": app})()
+    candidate = _candidate().model_copy(
+        update={"sources_total": 12, "language": "es", "codec": "HEVC", "hdr": True}
+    )
+
+    stream = _stream_object(candidate, request)
+
+    assert stream["description"] == candidate.name
+
+
 async def test_play_enqueues_a_new_download_once_and_returns_a_status_video(tmp_path):
     candidate = _candidate()
 
