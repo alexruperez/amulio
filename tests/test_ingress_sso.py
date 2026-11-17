@@ -105,6 +105,9 @@ def test_ingress_configuration_hides_generic_credentials(monkeypatch):
 
     assert "Open download manager" in ingress.text
     assert 'data-status-url="configure/status"' in ingress.text
+    assert 'const managerApiBase = ingressSso ? "admin" : "../admin";' in ingress.text
+    assert '`${managerApiBase}/${ingressSso ? "ingress-session" : "session"}`' in ingress.text
+    assert "`${managerApiBase}/downloads`" in ingress.text
     assert readiness.status_code == 200
     assert 'id="manager-password"' not in ingress.text
     assert 'id="manager-bootstrap"' not in ingress.text

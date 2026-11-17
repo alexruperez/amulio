@@ -1340,6 +1340,10 @@ def _configuration_page(
       const managerShared = document.getElementById("manager-shared");
       const managerConfirmation = document.getElementById("manager-confirmation");
       let managerCsrf = null;
+      // Ingress exposes the app under a per-session prefix. A parent-relative
+      // URL would escape that prefix; direct and tokenized pages retain the
+      // parent-relative API location.
+      const managerApiBase = ingressSso ? "admin" : "../admin";
       const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
       const selectedDownloads = () => Array.from(document.querySelectorAll(".manager-download:checked")).map((input) => input.value);
       function renderManager(data) {{
@@ -1348,7 +1352,7 @@ def _configuration_page(
         managerForm.hidden = false;
       }}
       async function loadManager() {{
-        const response = await fetch("../admin/downloads", {{ cache: "no-store" }});
+        const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
         if (!response.ok) throw new Error("queue");
         renderManager(await response.json());
       }}
@@ -1403,7 +1407,7 @@ def _configuration_page(
         managerFeedback.textContent = "";
         try {{
           const login = await fetch(
-            ingressSso ? "../admin/ingress-session" : "../admin/session",
+            `${{managerApiBase}}/${{ingressSso ? "ingress-session" : "session"}}`,
             ingressSso
               ? {{ method: "POST" }}
               : {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }}
@@ -1426,7 +1430,7 @@ def _configuration_page(
         const options = {{ method: action === "cancel" ? "DELETE" : "PATCH", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }} }};
         options.body = JSON.stringify(action === "cancel" ? {{ hashes, confirmation: managerConfirmation.value }} : {{ hashes, action }});
         try {{
-          const response = await fetch("../admin/downloads", options);
+          const response = await fetch(`${{managerApiBase}}/downloads`, options);
           if (!response.ok) throw new Error("mutation");
           managerConfirmation.value = "";
           await loadManager();
