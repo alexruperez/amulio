@@ -4,6 +4,7 @@
 
 import asyncio
 import html
+import ipaddress
 import json
 import logging
 import re
@@ -196,7 +197,7 @@ def _require_admin_session(request: Request) -> dict:
     """Return a verified admin session without accepting Stremio capabilities."""
     settings = _settings(request)
     session_token = request.cookies.get("amulio_admin")
-    if settings.admin_password is None or session_token is None:
+    if session_token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     try:
         payload = verify(session_token, secret=settings.token_secret.get_secret_value())
@@ -205,6 +206,19 @@ def _require_admin_session(request: Request) -> dict:
     if payload.get("scope") != "admin" or not isinstance(payload.get("csrf"), str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     return payload
+
+
+def _trusted_ingress_user(request: Request, settings: Settings) -> str | None:
+    """Accept a Supervisor identity header only from an explicitly trusted peer."""
+    user_id = request.headers.get("X-Remote-User-ID", "").strip()
+    client_host = request.client.host if request.client else ""
+    if not user_id or not client_host:
+        return None
+    try:
+        client_address = ipaddress.ip_address(client_host)
+    except ValueError:
+        return None
+    return user_id if any(client_address in network for network in settings.trusted_ingress_proxies) else None
 
 
 def _require_csrf(request: Request) -> None:
@@ -613,7 +627,12 @@ async def root() -> RedirectResponse:
 
 @app.get("/configure", response_class=HTMLResponse)
 async def configure(request: Request):
-    return _configuration_page(_settings(request), resolve_locale(request.query_params.get("lang")))
+    settings = _settings(request)
+    return _configuration_page(
+        settings,
+        resolve_locale(request.query_params.get("lang")),
+        ingress_sso=_trusted_ingress_user(request, settings) is not None,
+    )
 
 
 @app.get("/{installation_token}/configure", response_class=HTMLResponse)
@@ -768,6 +787,15 @@ async def bootstrap_admin_session(
     return _establish_admin_session(response, settings)
 
 
+@app.post("/admin/ingress-session", response_model=AdminSessionResponse)
+async def ingress_admin_session(request: Request, response: Response) -> AdminSessionResponse:
+    """Bootstrap only from a Supervisor proxy explicitly trusted by the operator."""
+    settings = _settings(request)
+    if _trusted_ingress_user(request, settings) is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return _establish_admin_session(response, settings)
+
+
 @app.delete("/admin/session", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_admin_session(request: Request, response: Response) -> None:
     _require_csrf(request)
@@ -881,7 +909,9 @@ async def revoke_profile(profile_id: str, request: Request, profiles: Profiles) 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
-def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
+def _configuration_page(
+    settings: Settings, locale: Locale = "en", *, ingress_sso: bool = False
+) -> str:
     manifest_url = (
         f"{str(settings.public_url).rstrip('/')}/"
         f"{settings.install_token.get_secret_value()}/manifest.json"
@@ -896,9 +926,18 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
     )
     # Keep this relative so Home Assistant Ingress retains its private app prefix.
     logo_url = html.escape(f"assets/amule-logo.png?v={AMULE_LOGO_VERSION}")
-    profile_management_enabled = settings.admin_password is not None
+    profile_management_enabled = settings.admin_password is not None and not ingress_sso
     profile_disabled = " disabled" if not profile_management_enabled else ""
     profile_hidden = " hidden" if not profile_management_enabled else ""
+    manager_hidden = " hidden" if settings.admin_password is None and not ingress_sso else ""
+    manager_auth = (
+        "<p>Home Assistant Ingress authorizes this manager session.</p>"
+        "<div class=\"actions\"><button class=\"button secondary\" type=\"button\" id=\"manager-load\">Open download manager</button></div>"
+        if ingress_sso
+        else "<label for=\"manager-password\">Administrator password"
+        "<input id=\"manager-password\" type=\"password\" autocomplete=\"current-password\""
+        f"{profile_disabled}></label><div class=\"actions\"><button class=\"button secondary\" type=\"button\" id=\"manager-load\"{profile_disabled}>Load queue and library</button></div>"
+    )
     bootstrap_action = (
         """
             <div id="manager-bootstrap">
@@ -908,7 +947,9 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
                 <button class="button secondary" type="button" id="manager-bootstrap-copy">Copy management link</button>
               </div>
             </div>"""
-        if settings.admin_password is not None and settings.admin_bootstrap_token is not None
+        if settings.admin_password is not None
+        and settings.admin_bootstrap_token is not None
+        and not ingress_sso
         else ""
     )
 
@@ -1086,15 +1127,12 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
             <div class="profile-feedback" id="profile-feedback" role="status"></div>
           </form>
         </details>
-        <details class="manager-settings" id="download-manager"{profile_hidden}>
+        <details class="manager-settings" id="download-manager"{manager_hidden}>
           <summary>Download manager</summary>
           <div class="profile-content">
-            <p>Queue controls require the administrator password. Completed shared files are shown read-only; deletion is not available.</p>
+            <p>Completed shared files are shown read-only; deletion is not available.</p>
             {bootstrap_action}
-            <label for="manager-password">Administrator password
-              <input id="manager-password" type="password" autocomplete="current-password"{profile_disabled}>
-            </label>
-            <div class="actions"><button class="button secondary" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>
+            {manager_auth}
             <div id="manager-feedback" class="profile-feedback" role="status"></div>
             <form id="manager-form" hidden>
               <div id="manager-downloads"></div>
@@ -1223,6 +1261,7 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       const managerBootstrapOpen = document.getElementById("manager-bootstrap-open");
       const managerBootstrapCopy = document.getElementById("manager-bootstrap-copy");
       const managerPassword = document.getElementById("manager-password");
+      const ingressSso = {str(ingress_sso).lower()};
       const managerFeedback = document.getElementById("manager-feedback");
       const managerForm = document.getElementById("manager-form");
       const managerDownloads = document.getElementById("manager-downloads");
@@ -1291,10 +1330,15 @@ def _configuration_page(settings: Settings, locale: Locale = "en") -> str:
       managerLoad?.addEventListener("click", async () => {{
         managerFeedback.textContent = "";
         try {{
-          const login = await fetch("../admin/session", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }});
+          const login = await fetch(
+            ingressSso ? "../admin/ingress-session" : "../admin/session",
+            ingressSso
+              ? {{ method: "POST" }}
+              : {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }}
+          );
           if (!login.ok) throw new Error("login");
           managerCsrf = (await login.json()).csrf_token;
-          managerPassword.value = "";
+          if (managerPassword) managerPassword.value = "";
           await loadManager();
           managerFeedback.dataset.kind = "success";
           managerFeedback.textContent = "Queue loaded.";
