@@ -59,3 +59,17 @@ async def test_lifecycle_mutations_reject_an_invalid_amuleapi_envelope():
     with pytest.raises(AmuleApiError, match="mutation results"):
         await client.cancel_downloads(["a" * 32])
     await client.close()
+
+
+async def test_reload_shared_files_uses_the_v0_shared_reload_endpoint(api_client):
+    client, requests = api_client
+
+    await client.reload_shared_files()
+
+    reload_requests = [
+        request
+        for request in requests
+        if request.method == "POST" and request.url.path.endswith("/shared/reload")
+    ]
+    assert len(reload_requests) == 1
+    assert reload_requests[0].url.path == "/api/v0/shared/reload"

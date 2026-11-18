@@ -161,7 +161,6 @@ def test_configuration_readiness_is_private_and_exposes_only_safe_connection_sta
         "amuleapi": "connected",
         "ed2k": "connected",
         "kad": "connecting",
-        "peer_access": "unknown",
         "incoming_storage": "ready",
         "public_url": "configured",
     }

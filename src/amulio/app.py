@@ -716,9 +716,6 @@ async def _configuration_status(settings: Settings, api: ApiClient) -> Response:
         "amuleapi": "connected" if amule_status else "unavailable",
         "ed2k": _connection_state(amule_status.get("ed2k")),
         "kad": _connection_state(amule_status.get("kad")),
-        # Home Assistant owns port publication. The core cannot inspect the
-        # effective host mapping or router/NAT state, so do not make a claim.
-        "peer_access": "unknown",
         "incoming_storage": "ready" if storage_ready else "unavailable",
         "public_url": "configured",
     }
@@ -918,6 +915,63 @@ async def cancel_managed_downloads(body: DownloadCancelRequest, request: Request
         raise HTTPException(status_code=503, detail="aMule cancellation failed") from exc
 
 
+async def _revalidated_library_paths(
+    hashes: list[str], *, settings: Settings, api: AmuleApiClient
+) -> list[tuple[str, Path]]:
+    """Resolve only currently shared, regular files inside configured media roots."""
+    shared = {
+        item["hash"].lower(): item
+        for item in await api.shared_files()
+        if isinstance(item.get("hash"), str) and isinstance(item.get("name"), str)
+    }
+    if any(file_hash not in shared for file_hash in hashes):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="One or more selected files are no longer shared",
+        )
+    details = await asyncio.gather(*(api.shared_file(file_hash) for file_hash in hashes))
+    resolved: list[tuple[str, Path]] = []
+    for file_hash, detail in zip(hashes, details, strict=True):
+        item = shared[file_hash]
+        if (
+            detail is None
+            or detail.hash.lower() != file_hash
+            or detail.name != item["name"]
+            or detail.size != item.get("size")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="One or more selected files changed before deletion",
+            )
+        path = _safe_media_path(str(Path(detail.path) / detail.name), settings=settings)
+        if path.name != detail.name or path.stat().st_size != detail.size:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="One or more selected files changed before deletion",
+            )
+        resolved.append((file_hash, path))
+    return resolved
+
+
+@app.delete("/admin/library")
+async def delete_managed_library(body: DownloadSelectionRequest, request: Request, api: ApiClient):
+    """Delete explicitly selected completed files and rescan aMule's shared index."""
+    _require_csrf(request)
+    hashes = body.normalized_hashes()
+    settings = _settings(request)
+    try:
+        paths = await _revalidated_library_paths(hashes, settings=settings, api=api)
+        for _, path in paths:
+            path.unlink()
+        await api.reload_shared_files()
+    except AmuleApiError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Library files may have been deleted but aMule could not refresh its shared index",
+        ) from exc
+    return {"results": [{"id": file_hash, "ok": True} for file_hash in hashes]}
+
+
 @app.post("/admin/profiles", response_model=AddonProfile, status_code=status.HTTP_201_CREATED)
 async def create_profile(
     request: Request, profiles: Profiles, preferences: ProfilePreferences | None = None
@@ -1005,29 +1059,6 @@ def _configuration_page(
     def t(key: str) -> str:
         return html.escape(translate(locale, key))
 
-    manager_auth = (
-        f"<p>{t('manager_ingress_auth')}</p>"
-        f'<div class="actions"><button class="button" type="button" id="manager-load">{t("manager_open")}</button></div>'
-        if ingress_sso
-        else f'<label for="manager-password">{t("admin_password")}'
-        '<input id="manager-password" type="password" autocomplete="current-password"'
-        f'{profile_disabled}></label><div class="actions"><button class="button" type="button" id="manager-load"{profile_disabled}>{t("manager_load")}</button></div>'
-    )
-    bootstrap_action = (
-        f"""
-            <div id="manager-bootstrap">
-              <p>{t("manager_bootstrap_intro")}</p>
-              <div class="actions">
-                <button class="button secondary" type="button" id="manager-bootstrap-open">{t("manager_bootstrap_open")}</button>
-                <button class="button secondary" type="button" id="manager-bootstrap-copy">{t("manager_bootstrap_copy")}</button>
-              </div>
-            </div>"""
-        if settings.admin_password is not None
-        and settings.admin_bootstrap_token is not None
-        and not ingress_sso
-        else ""
-    )
-
     status_labels = json.dumps(
         {
             key: translate(locale, key)
@@ -1049,9 +1080,6 @@ def _configuration_page(
             key: translate(locale, key)
             for key in (
                 "manager_connected",
-                "manager_bootstrap_missing",
-                "manager_bootstrap_copied",
-                "manager_bootstrap_copy_failed",
                 "manager_refresh",
                 "manager_loading",
                 "manager_loaded",
@@ -1068,6 +1096,12 @@ def _configuration_page(
                 "manager_cancel_failed",
                 "manager_update_failed",
                 "manager_library_empty",
+                "manager_library_selected",
+                "manager_delete",
+                "manager_delete_title",
+                "manager_delete_warning",
+                "manager_delete_completed",
+                "manager_delete_failed",
                 "manager_file_details",
                 "manager_network_unavailable",
                 "manager_pause_completed",
@@ -1092,8 +1126,6 @@ def _configuration_page(
           <summary><span class="manager-title">{t("manager_title")}</span><span class="manager-subtitle">{t("manager_subtitle")}</span></summary>
           <div class="profile-content">
             <p class="manager-intro">{t("manager_intro")}</p>
-            {bootstrap_action}
-            <div id="manager-auth">{manager_auth}</div>
             <div id="manager-session" class="manager-session" hidden>
               <strong>{t("manager_connected")}</strong><button class="button secondary" type="button" id="manager-refresh">{t("manager_refresh")}</button>
             </div>
@@ -1121,7 +1153,12 @@ def _configuration_page(
                   <p>{t("manager_network_hint")}</p>
                 </div>
               </details>
-              <h3>{t("manager_library")}</h3><div id="manager-shared"></div>
+              <h3>{t("manager_library")}</h3>
+              <div id="manager-shared"></div>
+              <div id="manager-library-toolbar" class="manager-toolbar" hidden>
+                <span id="manager-library-selection-count" class="manager-selection-count"></span>
+                <div class="actions"><button class="button destructive" type="button" id="manager-library-delete" data-destructive="true" disabled>{t("manager_delete")}</button></div>
+              </div>
             </section>
           </div>
         </details>
@@ -1132,21 +1169,19 @@ def _configuration_page(
 
     manager_script = (
         f"""\
-      const managerLoad = document.getElementById("manager-load");
       const managerRefresh = document.getElementById("manager-refresh");
-      const managerBootstrapOpen = document.getElementById("manager-bootstrap-open");
-      const managerBootstrapCopy = document.getElementById("manager-bootstrap-copy");
-      const managerPassword = document.getElementById("manager-password");
-      const ingressSso = {str(ingress_sso).lower()};
+      const downloadManager = document.getElementById("download-manager");
       const managerMessages = {manager_messages};
       const managerFeedback = document.getElementById("manager-feedback");
-      const managerAuth = document.getElementById("manager-auth");
       const managerSession = document.getElementById("manager-session");
       const managerContent = document.getElementById("manager-content");
       const managerDownloads = document.getElementById("manager-downloads");
       const managerShared = document.getElementById("manager-shared");
       const managerToolbar = document.getElementById("manager-toolbar");
       const managerSelectionCount = document.getElementById("manager-selection-count");
+      const managerLibraryToolbar = document.getElementById("manager-library-toolbar");
+      const managerLibrarySelectionCount = document.getElementById("manager-library-selection-count");
+      const managerLibraryDelete = document.getElementById("manager-library-delete");
       const managerCancelOpen = document.getElementById("manager-cancel-open");
       const managerCancelPanel = document.getElementById("manager-cancel-panel");
       const managerCancelTitle = document.getElementById("manager-cancel-title");
@@ -1157,10 +1192,7 @@ def _configuration_page(
       const managerNetworkStates = document.getElementById("manager-network-states");
       let managerCsrf = null;
       let managerFeedbackTimer = null;
-      // Ingress exposes the app under a per-session prefix. A parent-relative
-      // URL would escape that prefix; direct and tokenized pages retain the
-      // parent-relative API location.
-      const managerApiBase = ingressSso ? "admin" : "../admin";
+      const managerApiBase = "admin";
       const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
       const formatBytes = (value) => {{
         const bytes = Number(value);
@@ -1178,6 +1210,7 @@ def _configuration_page(
         return label || fileName;
       }};
       const selectedDownloads = () => Array.from(managerDownloads.querySelectorAll(".manager-download:checked")).map((input) => input.value);
+      const selectedLibrary = () => Array.from(managerShared.querySelectorAll(".manager-library:checked"));
       const cancellationPhrase = () => `CANCELAR ${{selectedDownloads().length}}`;
       function setManagerFeedback(message, kind = "success", transient = true) {{
         window.clearTimeout(managerFeedbackTimer);
@@ -1202,15 +1235,25 @@ def _configuration_page(
         managerCancelPrompt.textContent = managerMessages.manager_cancel_prompt.replace("{{confirmation}}", cancellationPhrase());
         resetCancellation();
       }}
+      function updateLibraryControls() {{
+        const selected = selectedLibrary();
+        const count = selected.length;
+        const size = selected.reduce((total, input) => total + Number(input.dataset.size || 0), 0);
+        managerLibraryToolbar.hidden = !managerShared.querySelector(".manager-library");
+        managerLibrarySelectionCount.textContent = managerMessages.manager_library_selected.replace("{{count}}", count).replace("{{size}}", formatBytes(size));
+        managerLibraryDelete.disabled = !count;
+        managerLibraryDelete.textContent = managerMessages.manager_delete.replace("{{count}}", count);
+      }}
       function renderManager(data) {{
         managerDownloads.innerHTML = data.downloads.length
           ? `<ul class="manager-download-list">${{data.downloads.map((item) => `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(item.size_done)}} / ${{formatBytes(item.size)}}</span></span></label></li>`).join("")}}</ul>`
           : `<p class="manager-empty">${{managerMessages.manager_empty}}</p>`;
         managerShared.innerHTML = data.shared.length
-          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><span class="manager-library-name">${{managerEscape(displayLibraryName(item.name))}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
+          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><label><input class="manager-library" type="checkbox" value="${{managerEscape(item.hash)}}" data-size="${{managerEscape(item.size)}}"><span><span class="manager-library-name">${{managerEscape(displayLibraryName(item.name))}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span></span></label><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
           : `<p class="manager-library-empty">${{managerMessages.manager_library_empty}}</p>`;
         managerContent.hidden = false;
         updateManagerControls();
+        updateLibraryControls();
       }}
       function renderNetworkStatus(states) {{
         managerNetworkStates.innerHTML = ["ed2k", "kad"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
@@ -1227,64 +1270,19 @@ def _configuration_page(
           managerNetworkStates.innerHTML = `<p class="manager-library-empty">${{managerMessages.manager_network_unavailable}}</p>`;
         }}
       }}
-      function bootstrapTokenFromFragment() {{
-        return new URLSearchParams(window.location.hash.slice(1)).get("admin-bootstrap");
-      }}
-      managerBootstrapCopy?.addEventListener("click", async () => {{
-        if (!bootstrapTokenFromFragment()) {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = managerMessages.manager_bootstrap_missing;
-          return;
-        }}
-        try {{
-          await navigator.clipboard.writeText(window.location.href);
-          managerFeedback.dataset.kind = "success";
-          managerFeedback.textContent = managerMessages.manager_bootstrap_copied;
-        }} catch {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = managerMessages.manager_bootstrap_copy_failed;
-        }}
-      }});
-      async function openManagerSession(login) {{
+      async function openManagerSession() {{
+        const login = await fetch("admin/ingress-session", {{ method: "POST" }});
+        if (!login.ok) throw new Error("login");
         managerCsrf = (await login.json()).csrf_token;
-        if (managerPassword) managerPassword.value = "";
         await loadManager();
-        managerAuth.hidden = true;
-        document.getElementById("manager-bootstrap")?.setAttribute("hidden", "");
         managerSession.hidden = false;
         setManagerFeedback(managerMessages.manager_loaded);
       }}
-      managerBootstrapOpen?.addEventListener("click", async () => {{
-        const token = bootstrapTokenFromFragment();
-        if (!token) {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); return; }}
-        managerBootstrapOpen.disabled = true;
-        history.replaceState(null, "", window.location.pathname + window.location.search);
-        try {{
-          const login = await fetch("../admin/bootstrap", {{
-            method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ token }})
-          }});
-          if (!login.ok) throw new Error("bootstrap");
-          await openManagerSession(login);
-        }} catch {{
-          setManagerFeedback(managerMessages.manager_load_failed, "error");
-        }} finally {{
-          managerBootstrapOpen.disabled = false;
-        }}
-      }});
-      managerLoad?.addEventListener("click", async () => {{
+      downloadManager.addEventListener("toggle", async () => {{
+        if (!downloadManager.open || managerCsrf) return;
         setManagerFeedback(managerMessages.manager_loading, "success", false);
-        try {{
-          const login = await fetch(
-            `${{managerApiBase}}/${{ingressSso ? "ingress-session" : "session"}}`,
-            ingressSso
-              ? {{ method: "POST" }}
-              : {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }}
-          );
-          if (!login.ok) throw new Error("login");
-          await openManagerSession(login);
-        }} catch {{
-          setManagerFeedback(managerMessages.manager_load_failed, "error");
-        }}
+        try {{ await openManagerSession(); }}
+        catch {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); }}
       }});
       managerRefresh.addEventListener("click", async () => {{
         managerRefresh.disabled = true;
@@ -1294,6 +1292,7 @@ def _configuration_page(
         finally {{ managerRefresh.disabled = false; }}
       }});
       managerDownloads.addEventListener("change", updateManagerControls);
+      managerShared.addEventListener("change", updateLibraryControls);
       managerCancelOpen.addEventListener("click", () => {{
         if (!selectedDownloads().length) return;
         managerCancelPanel.hidden = false;
@@ -1327,6 +1326,21 @@ def _configuration_page(
           await loadManager();
           setManagerFeedback(managerMessages.manager_cancel_completed);
         }} catch {{ setManagerFeedback(managerMessages.manager_cancel_failed, "error"); }}
+      }});
+      managerLibraryDelete.addEventListener("click", async () => {{
+        const selected = selectedLibrary();
+        const hashes = selected.map((input) => input.value);
+        const size = selected.reduce((total, input) => total + Number(input.dataset.size || 0), 0);
+        const confirmation = `${{managerMessages.manager_delete_title}}\n\n${{managerMessages.manager_library_selected.replace("{{count}}", hashes.length).replace("{{size}}", formatBytes(size))}}\n${{managerMessages.manager_delete_warning}}`;
+        if (!managerCsrf || !hashes.length || !window.confirm(confirmation)) return;
+        try {{
+          const response = await fetch(`${{managerApiBase}}/library`, {{
+            method: "DELETE", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes }})
+          }});
+          if (!response.ok) throw new Error("delete");
+          await loadManager();
+          setManagerFeedback(managerMessages.manager_delete_completed);
+        }} catch {{ setManagerFeedback(managerMessages.manager_delete_failed, "error"); }}
       }});
     """
         if ingress_sso
@@ -1410,7 +1424,7 @@ def _configuration_page(
       .intro {{ max-width: 40rem; margin: 1.25rem 0 2rem; color: #b9c5d4; font-size: 1.08rem; line-height: 1.65; }}
       .readiness {{ margin: 0 0 2rem; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .38); }}
       .readiness h2 {{ margin: 0 0 .8rem; color: #fff; font-size: .9rem; }}
-      .status-grid {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: .55rem; }}
+      .status-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: .55rem; }}
       .status {{ min-width: 0; padding: .65rem; border-radius: .65rem; background: rgba(255,255,255,.055); }}
       .status-label {{ display: block; overflow: hidden; color: #9dacbd; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }}
       .status-value {{ display: block; overflow: hidden; margin-top: .25rem; color: #e3ebf4; font-size: .78rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }}
@@ -1455,7 +1469,7 @@ def _configuration_page(
             <div class="status" data-key="amuleapi"><span class="status-label">{t("amuleapi")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="ed2k"><span class="status-label">{t("ed2k")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="kad"><span class="status-label">{t("kad")}</span><span class="status-value">{t("checking")}</span></div>
-            <div class="status" data-key="peer_access"><span class="status-label">{t("peer_access")}</span><span class="status-value">{t("checking")}</span></div>
+
             <div class="status" data-key="incoming_storage"><span class="status-label">{t("incoming_storage")}</span><span class="status-value">{t("checking")}</span></div>
             <div class="status" data-key="public_url"><span class="status-label">{t("public_url")}</span><span class="status-value">{t("checking")}</span></div>
           </div>
@@ -1538,7 +1552,7 @@ def _configuration_page(
       const readiness = document.getElementById("readiness");
       const readinessHint = document.getElementById("readiness-hint");
       const statusLabels = {status_labels};
-      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_limited", "readiness_hint_peer_unknown", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
+      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_limited", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
       function setActionFeedback(message, kind) {{
         actionFeedback.textContent = message;
         actionFeedback.dataset.kind = kind;
@@ -1573,7 +1587,7 @@ def _configuration_page(
           if (states.amuleapi !== "connected") hints.push(readinessMessages.readiness_hint_unavailable);
           if (states.ed2k === "disconnected") hints.push(readinessMessages.readiness_hint_disconnected);
           if (states.kad === "connecting") hints.push(readinessMessages.readiness_hint_connecting);
-          if (states.peer_access === "unknown") hints.push(readinessMessages.readiness_hint_peer_unknown);
+
           readinessHint.textContent = hints.length ? hints.join(" ") : readinessMessages.readiness_hint_ready;
         }})
         .catch(() => {{

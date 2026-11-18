@@ -125,6 +125,8 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     page: Page = browser.new_page(viewport={"width": 375, "height": 812})
     queue = {"downloads": [], "shared": []}
     mutations: list[str] = []
+    library_mutations: list[str] = []
+    delete_dialogs: list[str] = []
 
     def mock_downloads(route):
         if route.request.method == "GET":
@@ -136,10 +138,19 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     def mock_network_status(route):
         route.fulfill(
             status=200,
-            json={"ed2k": "connected", "kad": "connected", "peer_access": "unknown"},
+            json={"ed2k": "connected", "kad": "connected"},
         )
 
+    def mock_library(route):
+        library_mutations.append(route.request.method)
+        route.fulfill(status=200, json={"results": []})
+
+    def accept_library_delete(dialog):
+        delete_dialogs.append(dialog.message)
+        dialog.accept()
+
     page.route("**/admin/downloads", mock_downloads)
+    page.route("**/admin/library", mock_library)
     page.route("**/configure/status", mock_network_status)
     page.set_extra_http_headers(
         {
@@ -150,7 +161,6 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     ingress_url = configuration_server.rsplit("/", 2)[0] + "/configure?lang=es"
     page.goto(ingress_url)
     page.locator("#download-manager > summary").click()
-    page.locator("#manager-load").click()
     expect(page.locator("#manager-session")).to_be_visible()
     expect(page.locator("#manager-feedback")).to_have_attribute("aria-live", "polite")
     expect(page.locator(".manager-empty")).to_contain_text("No hay descargas activas")
@@ -180,6 +190,8 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     expect(page.locator(".manager-library-card details")).to_contain_text(
         "Original.Release.Name.mkv"
     )
+    expect(page.locator(".manager-library")).to_have_count(1)
+    expect(page.locator("#manager-library-delete")).to_be_disabled()
 
     page.locator("#manager-network > summary").click()
     expect(page.locator(".manager-network-state")).to_have_count(2)
@@ -213,4 +225,21 @@ def test_download_manager_mobile_states_are_localized_and_safe(
         "hashes": ["a" * 32],
         "confirmation": "CANCELAR 1",
     }
+
+    page.locator(".manager-library").check()
+    expect(page.locator("#manager-library-selection-count")).to_contain_text(
+        "1 archivos seleccionados (1 KiB)"
+    )
+    page.on("dialog", accept_library_delete)
+    with page.expect_request(
+        lambda request: request.url.endswith("/admin/library") and request.method == "DELETE"
+    ) as library_delete_request:
+        page.locator("#manager-library-delete").click()
+    library_request = library_delete_request.value
+    expect(page.locator("#manager-feedback")).to_contain_text("Archivos completados eliminados")
+    assert library_mutations == ["DELETE"]
+    assert len(delete_dialogs) == 1
+    assert "1 archivos seleccionados (1 KiB)" in delete_dialogs[0]
+    assert library_request.header_value("X-CSRF-Token")
+    assert library_request.post_data_json == {"hashes": ["b" * 32]}
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

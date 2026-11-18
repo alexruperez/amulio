@@ -106,16 +106,18 @@ def test_ingress_configuration_hides_generic_credentials(monkeypatch):
         )
         rejected_status = direct.get("/configure/status", headers=ingress_headers)
 
-    assert "Open download manager" in ingress.text
+    assert "Download manager" in ingress.text
     assert 'data-status-url="configure/status"' in ingress.text
-    assert 'const managerApiBase = ingressSso ? "admin" : "../admin";' in ingress.text
-    assert '`${managerApiBase}/${ingressSso ? "ingress-session" : "session"}`' in ingress.text
+    assert 'const managerApiBase = "admin";' in ingress.text
+    assert 'fetch("admin/ingress-session", { method: "POST" })' in ingress.text
     assert "`${managerApiBase}/downloads`" in ingress.text
+    assert 'id="manager-load"' not in ingress.text
+    assert "admin/bootstrap" not in ingress.text
     assert readiness.status_code == 200
     assert 'id="manager-password"' not in ingress.text
     assert 'id="manager-bootstrap"' not in ingress.text
     assert '<details class="profile-settings" hidden>' in ingress.text
-    assert "Open download manager" not in public.text
+    assert "Download manager" not in public.text
     assert f'data-status-url="http://127.0.0.1:8000/{"i" * 24}/configure/status"' in public.text
     assert rejected_status.status_code == 404
 
