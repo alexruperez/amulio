@@ -743,7 +743,11 @@ class AdminSessionResponse(BaseModel):
 
 
 def _establish_admin_session(
-    response: Response, settings: Settings, *, cookie_path: str = "/admin"
+    response: Response,
+    settings: Settings,
+    *,
+    cookie_path: str = "/admin",
+    secure: bool | None = None,
 ) -> AdminSessionResponse:
     """Set an HttpOnly, CSRF-bound administrative session after authentication."""
     csrf_token = secrets.token_urlsafe(32)
@@ -757,7 +761,7 @@ def _establish_admin_session(
         session_token,
         max_age=settings.admin_session_ttl_seconds,
         httponly=True,
-        secure=str(settings.public_url).startswith("https://"),
+        secure=str(settings.public_url).startswith("https://") if secure is None else secure,
         samesite="strict",
         path=cookie_path,
     )
@@ -842,7 +846,13 @@ async def ingress_admin_session(request: Request, response: Response) -> AdminSe
     ingress_path = _trusted_ingress_path(request, settings)
     if _trusted_ingress_user(request, settings) is None or ingress_path is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    return _establish_admin_session(response, settings, cookie_path=f"{ingress_path}/admin")
+    # Ingress is served through Home Assistant's own origin, which can be
+    # HTTP even when the separate Stremio public_url is HTTPS. A Secure cookie
+    # would be discarded by browsers at http://homeassistant.local, leaving a
+    # successful SSO bootstrap unable to read the manager on its next request.
+    return _establish_admin_session(
+        response, settings, cookie_path=f"{ingress_path}/admin", secure=False
+    )
 
 
 @app.delete("/admin/session", status_code=status.HTTP_204_NO_CONTENT)
