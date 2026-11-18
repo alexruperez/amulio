@@ -20,7 +20,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "amuleapi": "amuleapi",
         "ed2k": "eD2K",
         "kad": "Kad",
-        "peer_access": "Inbound peers",
         "incoming_storage": "Incoming storage",
         "public_url": "Public URL",
         "checking": "Checking…",
@@ -98,17 +97,13 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "Kad is still connecting; remote results can take a few minutes to appear."
         ),
         "readiness_hint_limited": "",
-        "readiness_hint_peer_unknown": (
-            "Port publication is configured in Home Assistant Network. This app cannot verify "
-            "host mappings, router forwarding, NAT, or public reachability."
-        ),
         "readiness_hint_unavailable": (
             "aMule is unavailable. Check the daemon and its private amuleapi connection."
         ),
         "readiness_hint_ready": "aMule is ready for local playback and remote discovery.",
         "manager_title": "Download manager",
         "manager_subtitle": "Queue and library",
-        "manager_intro": "Manage active downloads. Completed shared files are read-only.",
+        "manager_intro": "Manage active downloads and completed shared files.",
         "manager_ingress_auth": "Home Assistant Ingress authorizes this manager session.",
         "manager_bootstrap_intro": (
             "Open the admin manager with an operator-provided management link. Its bootstrap "
@@ -121,7 +116,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "Management link copied. Its token remains in the URL fragment."
         ),
         "manager_bootstrap_copy_failed": "Could not copy the management link.",
-        "manager_open": "Open download manager",
         "manager_load": "Load queue and library",
         "manager_connected": "Manager connected",
         "manager_refresh": "Refresh",
@@ -145,6 +139,15 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "manager_update_failed": "Queue update failed; refresh selections.",
         "manager_library": "Completed shared library",
         "manager_library_empty": "No completed shared files.",
+        "manager_library_selected": "{count} files selected ({size})",
+        "manager_delete": "Delete {count} files…",
+        "manager_delete_title": "Delete selected completed files",
+        "manager_delete_warning": (
+            "This permanently removes the selected completed files from Incoming."
+        ),
+        "manager_delete_confirm": "Delete files",
+        "manager_delete_failed": "Deletion failed. Refresh the library before trying again.",
+        "manager_delete_completed": "Completed files deleted.",
         "manager_file_details": "Technical filename",
         "manager_network": "Network and node status",
         "manager_network_hint": (
@@ -175,7 +178,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "amuleapi": "amuleapi",
         "ed2k": "eD2K",
         "kad": "Kad",
-        "peer_access": "Pares entrantes",
         "incoming_storage": "Almacenamiento Incoming",
         "public_url": "URL pública",
         "checking": "Comprobando…",
@@ -253,11 +255,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "Kad sigue conectando; los resultados remotos pueden tardar unos minutos en aparecer."
         ),
         "readiness_hint_limited": "",
-        "readiness_hint_peer_unknown": (
-            "La publicación de puertos se configura en Network de Home Assistant. Esta app no "
-            "puede verificar los mapeos del host, el reenvío del router, NAT ni la "
-            "accesibilidad pública."
-        ),
         "readiness_hint_unavailable": (
             "aMule no está disponible. Comprueba el daemon y su conexión privada con amuleapi."
         ),
@@ -266,10 +263,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         ),
         "manager_title": "Gestor de descargas",
         "manager_subtitle": "Cola y biblioteca",
-        "manager_intro": (
-            "Gestiona las descargas activas. Los archivos compartidos completados son de solo "
-            "lectura."
-        ),
+        "manager_intro": "Gestiona descargas activas y archivos compartidos completados.",
         "manager_ingress_auth": "Home Assistant Ingress autoriza esta sesión del gestor.",
         "manager_bootstrap_intro": (
             "Abre el gestor de administración con un enlace proporcionado por el operador. Su "
@@ -283,7 +277,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "Enlace de administración copiado. Su token permanece en el fragmento de la URL."
         ),
         "manager_bootstrap_copy_failed": "No se pudo copiar el enlace de administración.",
-        "manager_open": "Abrir gestor de descargas",
         "manager_load": "Cargar cola y biblioteca",
         "manager_connected": "Gestor conectado",
         "manager_refresh": "Actualizar",
@@ -308,6 +301,17 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "manager_update_failed": "La actualización de la cola falló; actualiza las selecciones.",
         "manager_library": "Biblioteca compartida completada",
         "manager_library_empty": "No hay archivos compartidos completados.",
+        "manager_library_selected": "{count} archivos seleccionados ({size})",
+        "manager_delete": "Eliminar {count} archivos…",
+        "manager_delete_title": "Eliminar archivos completados seleccionados",
+        "manager_delete_warning": (
+            "Esto elimina permanentemente los archivos completados seleccionados de Incoming."
+        ),
+        "manager_delete_confirm": "Eliminar archivos",
+        "manager_delete_failed": (
+            "El borrado ha fallado. Actualiza la biblioteca antes de reintentarlo."
+        ),
+        "manager_delete_completed": "Archivos completados eliminados.",
         "manager_file_details": "Nombre técnico del archivo",
         "manager_network": "Estado de red y nodo",
         "manager_network_hint": (

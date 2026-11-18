@@ -113,6 +113,10 @@ class AmuleApiClient:
             raise AmuleApiError("amuleapi shared response did not include a shared list")
         return shared
 
+    async def reload_shared_files(self) -> None:
+        """Ask aMule to rescan configured shared directories after a local deletion."""
+        await self._request("POST", "shared/reload")
+
     async def add_download(self, ed2k_link: str) -> None:
         await self._request("POST", "downloads", json={"ed2k_link": ed2k_link})
 
