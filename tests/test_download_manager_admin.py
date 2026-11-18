@@ -16,7 +16,10 @@ class FakeAmuleApi:
             },
             {"hash": "b" * 32, "name": "finished.mkv", "size": 200, "status": "completed"},
         ]
-        self.shared_items = [{"hash": "b" * 32, "name": "finished.mkv", "size": 200}]
+        self.shared_items = [
+            {"hash": "A" * 32, "name": "active-preview.mkv", "size": 100},
+            {"hash": "b" * 32, "name": "finished.mkv", "size": 200},
+        ]
         self.calls: list[tuple[str, list[str]]] = []
 
     async def downloads(self):
@@ -128,30 +131,27 @@ def test_download_manager_requires_admin_session_csrf_and_active_selections(monk
     get_settings.cache_clear()
 
 
-def test_cancellation_requires_exact_spanish_count_confirmation(monkeypatch):
+def test_cancellation_requires_only_an_active_selection(monkeypatch):
     configure_admin(monkeypatch)
     with TestClient(app) as client:
         fake = FakeAmuleApi()
         app.state.amule_api = fake
         csrf = login(client)
-        payload = {"hashes": ["a" * 32], "confirmation": "CANCELAR 2"}
-        assert (
-            client.request(
-                "DELETE", "/admin/downloads", headers={"X-CSRF-Token": csrf}, json=payload
-            ).status_code
-            == 422
-        )
-        payload["confirmation"] = "CANCELAR 1"
         cancelled = client.request(
-            "DELETE", "/admin/downloads", headers={"X-CSRF-Token": csrf}, json=payload
+            "DELETE",
+            "/admin/downloads",
+            headers={"X-CSRF-Token": csrf},
+            json={"hashes": ["a" * 32]},
         )
         assert cancelled.status_code == 200
         assert fake.calls == [("cancel", ["a" * 32])]
-        # The completed item cannot be cancelled even with a valid confirmation.
-        payload = {"hashes": ["b" * 32], "confirmation": "CANCELAR 1"}
+        # The completed item cannot be cancelled.
         assert (
             client.request(
-                "DELETE", "/admin/downloads", headers={"X-CSRF-Token": csrf}, json=payload
+                "DELETE",
+                "/admin/downloads",
+                headers={"X-CSRF-Token": csrf},
+                json={"hashes": ["b" * 32]},
             ).status_code
             == 409
         )

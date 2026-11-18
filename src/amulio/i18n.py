@@ -131,11 +131,7 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "manager_cancel_warning": (
             "This removes the selected active downloads. Completed files are not affected."
         ),
-        "manager_cancel_prompt": "Type {confirmation} to enable cancellation.",
-        "manager_cancel_confirm": "Cancel downloads",
-        "manager_cancel_failed": (
-            "Cancellation failed. Type the exact confirmation and refresh selections."
-        ),
+        "manager_cancel_failed": "Cancellation failed. Refresh selections before trying again.",
         "manager_update_failed": "Queue update failed; refresh selections.",
         "manager_library": "Completed shared library",
         "manager_library_empty": "No completed shared files.",
@@ -293,10 +289,8 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "Esto elimina las descargas activas seleccionadas. Los archivos completados no se "
             "modifican."
         ),
-        "manager_cancel_prompt": "Escribe {confirmation} para activar la cancelación.",
-        "manager_cancel_confirm": "Cancelar descargas",
         "manager_cancel_failed": (
-            "La cancelación falló. Escribe la confirmación exacta y actualiza las selecciones."
+            "La cancelación falló. Actualiza las selecciones antes de reintentarlo."
         ),
         "manager_update_failed": "La actualización de la cola falló; actualiza las selecciones.",
         "manager_library": "Biblioteca compartida completada",
