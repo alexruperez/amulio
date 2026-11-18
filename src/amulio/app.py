@@ -1070,7 +1070,6 @@ def _configuration_page(
                 "manager_library_empty",
                 "manager_file_details",
                 "manager_network_unavailable",
-                "manager_peers",
                 "manager_pause_completed",
                 "manager_resume_completed",
                 "manager_cancel_completed",
@@ -1172,6 +1171,12 @@ def _configuration_page(
         while (formatted >= 1024 && index < units.length - 1) {{ formatted /= 1024; index += 1; }}
         return `${{formatted.toLocaleString(undefined, {{ maximumFractionDigits: index ? 1 : 0 }})}} ${{units[index]}}`;
       }};
+      const displayLibraryName = (value) => {{
+        const fileName = String(value).trim();
+        const stem = fileName.replace(/[.][^.]+$/, "");
+        const label = stem.replace(/[._]+/g, " ").replace(/ +/g, " ").trim();
+        return label || fileName;
+      }};
       const selectedDownloads = () => Array.from(managerDownloads.querySelectorAll(".manager-download:checked")).map((input) => input.value);
       const cancellationPhrase = () => `CANCELAR ${{selectedDownloads().length}}`;
       function setManagerFeedback(message, kind = "success", transient = true) {{
@@ -1202,13 +1207,13 @@ def _configuration_page(
           ? `<ul class="manager-download-list">${{data.downloads.map((item) => `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(item.size_done)}} / ${{formatBytes(item.size)}}</span></span></label></li>`).join("")}}</ul>`
           : `<p class="manager-empty">${{managerMessages.manager_empty}}</p>`;
         managerShared.innerHTML = data.shared.length
-          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><span class="manager-library-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
+          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><span class="manager-library-name">${{managerEscape(displayLibraryName(item.name))}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
           : `<p class="manager-library-empty">${{managerMessages.manager_library_empty}}</p>`;
         managerContent.hidden = false;
         updateManagerControls();
       }}
       function renderNetworkStatus(states) {{
-        managerNetworkStates.innerHTML = ["ed2k", "kad", "peer_access"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "peer_access" ? managerMessages.manager_peers : key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
+        managerNetworkStates.innerHTML = ["ed2k", "kad"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
       }}
       async function loadManager() {{
         const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
@@ -1373,8 +1378,8 @@ def _configuration_page(
       #download-manager .manager-library-card code { margin-top: .45rem; padding: .55rem; font-size: .74rem; }
       #download-manager .manager-network { margin-top: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .8rem; }
       #download-manager .manager-network summary { padding: .85rem; color: #fff; font-weight: 750; cursor: pointer; }
-      #download-manager .manager-network-body { display: grid; gap: .7rem; padding: 0 .85rem .85rem; }
-      #download-manager .manager-network-states { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+      #download-manager .manager-network-body { display: grid; gap: .7rem; padding: .85rem; }
+      #download-manager .manager-network-states { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
       #download-manager .manager-network-state { padding: .55rem; border-radius: .55rem; background: rgba(255,255,255,.055); color: #9dacbd; font-size: .72rem; }
       #download-manager .manager-network-state strong { display: block; margin-top: .15rem; color: #edf2f7; font-size: .8rem; }
     """
