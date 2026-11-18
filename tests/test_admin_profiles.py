@@ -92,7 +92,7 @@ def test_bootstrap_establishes_a_csrf_protected_session_only_when_configured(mon
 
     with TestClient(app) as client:
         configure_page = client.get("/configure")
-        assert '<div id="manager-bootstrap">' in configure_page.text
+        assert '<div id="manager-bootstrap">' not in configure_page.text
         assert bootstrap_token not in configure_page.text
 
         wrong = client.post("/admin/bootstrap", json={"token": "x" * 32})
