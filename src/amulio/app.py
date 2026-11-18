@@ -1215,7 +1215,6 @@ def _configuration_page(
                 "manager_delete_completed",
                 "manager_delete_failed",
                 "manager_file_details",
-                "manager_network_unavailable",
                 "manager_pause_completed",
                 "manager_resume_completed",
                 "manager_cancel_completed",
@@ -1252,13 +1251,6 @@ def _configuration_page(
                   <button class="button destructive" type="button" id="manager-cancel-open" data-destructive="true" disabled></button>
                 </div>
               </div>
-              <details class="manager-network" id="manager-network">
-                <summary>{t("manager_network")}</summary>
-                <div class="manager-network-body">
-                  <div id="manager-network-states" class="manager-network-states"></div>
-                  <p>{t("manager_network_hint")}</p>
-                </div>
-              </details>
               <h3>{t("manager_library")}</h3>
               <div id="manager-shared"></div>
               <div id="manager-library-toolbar" class="manager-toolbar" hidden>
@@ -1289,7 +1281,6 @@ def _configuration_page(
       const managerLibrarySelectionCount = document.getElementById("manager-library-selection-count");
       const managerLibraryDelete = document.getElementById("manager-library-delete");
       const managerCancelOpen = document.getElementById("manager-cancel-open");
-      const managerNetworkStates = document.getElementById("manager-network-states");
       let managerCsrf = null;
       let managerFeedbackTimer = null;
       let managerLoadPromise = null;
@@ -1370,22 +1361,12 @@ def _configuration_page(
         updateManagerControls();
         updateLibraryControls();
       }}
-      function renderNetworkStatus(states) {{
-        managerNetworkStates.innerHTML = ["ed2k", "kad"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
-      }}
       function loadManager() {{
         if (managerLoadPromise) return managerLoadPromise;
         managerLoadPromise = (async () => {{
           const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
           if (!response.ok) throw new Error("queue");
           renderManager(await response.json());
-          try {{
-            const network = await fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }});
-            if (!network.ok) throw new Error("network");
-            renderNetworkStatus(await network.json());
-          }} catch {{
-            managerNetworkStates.innerHTML = `<p class="manager-library-empty">${{managerMessages.manager_network_unavailable}}</p>`;
-          }}
         }})();
         managerLoadPromise.finally(() => {{ managerLoadPromise = null; }}).catch(() => {{}});
         return managerLoadPromise;
@@ -1524,12 +1505,7 @@ def _configuration_page(
       #download-manager .manager-library-card details { margin-top: .55rem; color: #9dacbd; font-size: .78rem; }
       #download-manager .manager-library-card summary { cursor: pointer; }
       #download-manager .manager-library-card code { margin-top: .45rem; padding: .55rem; font-size: .74rem; }
-      #download-manager .manager-network { margin-top: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .8rem; }
-      #download-manager .manager-network summary { padding: .85rem; color: #fff; font-weight: 750; cursor: pointer; }
-      #download-manager .manager-network-body { display: grid; gap: .7rem; padding: .85rem; }
-      #download-manager .manager-network-states { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
-      #download-manager .manager-network-state { padding: .55rem; border-radius: .55rem; background: rgba(255,255,255,.055); color: #9dacbd; font-size: .72rem; }
-      #download-manager .manager-network-state strong { display: block; margin-top: .15rem; color: #edf2f7; font-size: .8rem; }
+
     """
         if ingress_sso
         else ""
