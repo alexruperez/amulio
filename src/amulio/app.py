@@ -961,14 +961,31 @@ async def delete_managed_library(body: DownloadSelectionRequest, request: Reques
     settings = _settings(request)
     try:
         paths = await _revalidated_library_paths(hashes, settings=settings, api=api)
-        for _, path in paths:
-            path.unlink()
-        await api.reload_shared_files()
     except AmuleApiError as exc:
+        raise HTTPException(status_code=503, detail="aMule shared library is unavailable") from exc
+
+    deleted: list[str] = []
+    failures: list[str] = []
+    for file_hash, path in paths:
+        try:
+            path.unlink()
+            deleted.append(file_hash)
+        except OSError:
+            failures.append(file_hash)
+
+    if deleted:
+        try:
+            await api.reload_shared_files()
+        except AmuleApiError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Library files may have been deleted but aMule could not refresh its shared index",
+            ) from exc
+    if failures:
         raise HTTPException(
-            status_code=503,
-            detail="Library files may have been deleted but aMule could not refresh its shared index",
-        ) from exc
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Some selected files could not be deleted; the shared index was refreshed",
+        )
     return {"results": [{"id": file_hash, "ok": True} for file_hash in hashes]}
 
 
