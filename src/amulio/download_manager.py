@@ -51,11 +51,14 @@ def public_download(item: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("amuleapi returned a download with an invalid hash")
     name = item.get("name")
     size = item.get("size")
+    normalized_size = size if isinstance(size, int) and size >= 0 else 0
+    size_done = item.get("size_done")
+    normalized_size_done = size_done if isinstance(size_done, int) else 0
     return {
         "hash": file_hash.lower(),
         "name": name if isinstance(name, str) else "Unnamed download",
-        "size": size if isinstance(size, int) and size >= 0 else 0,
-        "size_done": item.get("size_done") if isinstance(item.get("size_done"), int) else 0,
+        "size": normalized_size,
+        "size_done": max(0, min(normalized_size, normalized_size_done)),
         "speed_bps": item.get("speed_bps") if isinstance(item.get("speed_bps"), int) else 0,
         "status": item.get("status") if isinstance(item.get("status"), str) else "unknown",
     }

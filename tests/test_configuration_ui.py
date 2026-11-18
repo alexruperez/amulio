@@ -187,6 +187,11 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     )
     page.locator("#manager-refresh").click()
     expect(page.locator(".manager-download")).to_have_count(1)
+    progress = page.locator(".manager-download-row progress")
+    expect(progress).to_have_attribute("value", "1024")
+    expect(progress).to_have_attribute("max", "2048")
+    expect(progress).to_have_attribute("aria-label", "50% completado")
+    expect(page.locator(".manager-progress")).to_contain_text("50% completado")
     expect(page.locator('[data-manager-action="pause"]')).to_be_disabled()
     expect(page.locator("#manager-cancel-open")).to_be_disabled()
     expect(page.locator(".manager-library-card")).to_contain_text("1 KiB")
@@ -243,3 +248,55 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     assert library_request.header_value("X-CSRF-Token")
     assert library_request.post_data_json == {"hashes": ["b" * 32]}
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+@pytest.mark.ui
+def test_download_manager_polls_open_sessions_and_stops_when_closed(
+    configuration_server: str, browser: Browser
+):
+    page: Page = browser.new_page(viewport={"width": 375, "height": 812})
+    queue = {
+        "downloads": [
+            {
+                "hash": "c" * 32,
+                "name": "active.mkv",
+                "size": 2048,
+                "size_done": 512,
+                "status": "downloading",
+            }
+        ],
+        "shared": [],
+    }
+    download_requests = 0
+
+    def mock_downloads(route):
+        nonlocal download_requests
+        download_requests += 1
+        route.fulfill(status=200, json=queue)
+
+    page.route("**/admin/downloads", mock_downloads)
+    page.route(
+        "**/configure/status",
+        lambda route: route.fulfill(status=200, json={"ed2k": "connected", "kad": "connected"}),
+    )
+    page.set_extra_http_headers(
+        {
+            "X-Remote-User-ID": "owner",
+            "X-Ingress-Path": "/api/hassio_ingress/test",
+        }
+    )
+    page.goto(configuration_server.rsplit("/", 2)[0] + "/configure")
+    page.locator("#download-manager > summary").click()
+    expect(page.locator(".manager-progress")).to_contain_text("25% complete")
+    queue["downloads"][0]["size_done"] = 4096
+
+    expect(page.locator(".manager-progress")).to_contain_text("100% complete", timeout=6500)
+    progress = page.locator(".manager-download-row progress")
+    expect(progress).to_have_attribute("value", "2048")
+    expect(progress).to_have_attribute("max", "2048")
+    assert download_requests >= 2
+
+    page.locator("#download-manager > summary").click()
+    requests_when_closed = download_requests
+    page.wait_for_timeout(5500)
+    assert download_requests == requests_when_closed

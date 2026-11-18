@@ -1198,6 +1198,7 @@ def _configuration_page(
                 "manager_loaded",
                 "manager_load_failed",
                 "manager_empty",
+                "manager_progress",
                 "manager_selected",
                 "manager_pause",
                 "manager_resume",
@@ -1291,8 +1292,11 @@ def _configuration_page(
       const managerNetworkStates = document.getElementById("manager-network-states");
       let managerCsrf = null;
       let managerFeedbackTimer = null;
+      let managerLoadPromise = null;
+      let managerPollTimer = null;
       const deletedLibraryHashes = new Set();
       const managerApiBase = "admin";
+      const managerPollIntervalMs = 5000;
       const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
       const formatBytes = (value) => {{
         const bytes = Number(value);
@@ -1311,6 +1315,14 @@ def _configuration_page(
       }};
       const selectedDownloads = () => Array.from(managerDownloads.querySelectorAll(".manager-download:checked")).map((input) => input.value);
       const selectedLibrary = () => Array.from(managerShared.querySelectorAll(".manager-library:checked"));
+      const downloadProgress = (item) => {{
+        const size = Number(item.size);
+        const done = Number(item.size_done);
+        if (!Number.isFinite(size) || size <= 0) return null;
+        const boundedDone = Math.max(0, Math.min(size, Number.isFinite(done) ? done : 0));
+        return {{ size, done: boundedDone, percent: Math.round((boundedDone / size) * 100) }};
+      }};
+      const selectedDownloadHashes = () => new Set(selectedDownloads().map((hash) => hash.toLowerCase()));
       function setManagerFeedback(message, kind = "success", transient = true) {{
         window.clearTimeout(managerFeedbackTimer);
         managerFeedback.dataset.kind = kind;
@@ -1334,9 +1346,21 @@ def _configuration_page(
         managerLibraryDelete.disabled = !count;
         managerLibraryDelete.textContent = managerMessages.manager_delete.replace("{{count}}", count);
       }}
+      function renderDownload(item, selected) {{
+        const progress = downloadProgress(item);
+        const progressText = progress
+          ? managerMessages.manager_progress.replace("{{percent}}", progress.percent)
+          : "";
+        const progressMarkup = progress
+          ? `<div class="manager-progress"><progress value="${{progress.done}}" max="${{progress.size}}" aria-label="${{managerEscape(progressText)}}"></progress><span>${{managerEscape(progressText)}}</span></div>`
+          : "";
+        const checked = selected.has(String(item.hash).toLowerCase()) ? " checked" : "";
+        return `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"${{checked}}><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(progress ? progress.done : item.size_done)}} / ${{formatBytes(item.size)}}${{progress ? ` · ${{managerEscape(progressText)}}` : ""}}</span>${{progressMarkup}}</span></label></li>`;
+      }}
       function renderManager(data) {{
+        const selected = selectedDownloadHashes();
         managerDownloads.innerHTML = data.downloads.length
-          ? `<ul class="manager-download-list">${{data.downloads.map((item) => `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(item.size_done)}} / ${{formatBytes(item.size)}}</span></span></label></li>`).join("")}}</ul>`
+          ? `<ul class="manager-download-list">${{data.downloads.map((item) => renderDownload(item, selected)).join("")}}</ul>`
           : `<p class="manager-empty">${{managerMessages.manager_empty}}</p>`;
         const visibleShared = data.shared.filter((item) => !deletedLibraryHashes.has(String(item.hash).toLowerCase()));
         managerShared.innerHTML = visibleShared.length
@@ -1349,17 +1373,34 @@ def _configuration_page(
       function renderNetworkStatus(states) {{
         managerNetworkStates.innerHTML = ["ed2k", "kad"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
       }}
-      async function loadManager() {{
-        const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
-        if (!response.ok) throw new Error("queue");
-        renderManager(await response.json());
-        try {{
-          const network = await fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }});
-          if (!network.ok) throw new Error("network");
-          renderNetworkStatus(await network.json());
-        }} catch {{
-          managerNetworkStates.innerHTML = `<p class="manager-library-empty">${{managerMessages.manager_network_unavailable}}</p>`;
-        }}
+      function loadManager() {{
+        if (managerLoadPromise) return managerLoadPromise;
+        managerLoadPromise = (async () => {{
+          const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
+          if (!response.ok) throw new Error("queue");
+          renderManager(await response.json());
+          try {{
+            const network = await fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }});
+            if (!network.ok) throw new Error("network");
+            renderNetworkStatus(await network.json());
+          }} catch {{
+            managerNetworkStates.innerHTML = `<p class="manager-library-empty">${{managerMessages.manager_network_unavailable}}</p>`;
+          }}
+        }})();
+        managerLoadPromise.finally(() => {{ managerLoadPromise = null; }}).catch(() => {{}});
+        return managerLoadPromise;
+      }}
+      function stopManagerPolling() {{
+        window.clearTimeout(managerPollTimer);
+        managerPollTimer = null;
+      }}
+      function scheduleManagerPolling() {{
+        stopManagerPolling();
+        if (!managerCsrf || !downloadManager.open || document.hidden) return;
+        managerPollTimer = window.setTimeout(async () => {{
+          try {{ await loadManager(); }} catch {{}}
+          scheduleManagerPolling();
+        }}, managerPollIntervalMs);
       }}
       async function openManagerSession() {{
         const login = await fetch("admin/ingress-session", {{ method: "POST" }});
@@ -1368,19 +1409,26 @@ def _configuration_page(
         await loadManager();
         managerSession.hidden = false;
         setManagerFeedback(managerMessages.manager_loaded);
+        scheduleManagerPolling();
       }}
       downloadManager.addEventListener("toggle", async () => {{
-        if (!downloadManager.open || managerCsrf) return;
+        if (!downloadManager.open) {{ stopManagerPolling(); return; }}
+        if (managerCsrf) {{ scheduleManagerPolling(); return; }}
         setManagerFeedback(managerMessages.manager_loading, "success", false);
         try {{ await openManagerSession(); }}
         catch {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); }}
       }});
+      document.addEventListener("visibilitychange", () => {{
+        if (document.hidden) stopManagerPolling();
+        else scheduleManagerPolling();
+      }});
+      window.addEventListener("pagehide", stopManagerPolling);
       managerRefresh.addEventListener("click", async () => {{
         managerRefresh.disabled = true;
         setManagerFeedback(managerMessages.manager_loading, "success", false);
         try {{ await loadManager(); setManagerFeedback(managerMessages.manager_loaded); }}
         catch {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); }}
-        finally {{ managerRefresh.disabled = false; }}
+        finally {{ managerRefresh.disabled = false; scheduleManagerPolling(); }}
       }});
       managerDownloads.addEventListener("change", updateManagerControls);
       managerShared.addEventListener("change", updateLibraryControls);
@@ -1465,6 +1513,8 @@ def _configuration_page(
       #download-manager .manager-download-row label { display: flex; align-items: flex-start; gap: .65rem; margin: 0; }
       #download-manager .manager-download-name, #download-manager .manager-library-name { overflow-wrap: anywhere; color: #fff; font-weight: 750; }
       #download-manager .manager-meta { display: block; margin-top: .2rem; color: #9dacbd; font-size: .78rem; font-weight: 500; }
+      #download-manager .manager-progress { display: flex; align-items: center; gap: .55rem; margin-top: .55rem; color: #c6d4c9; font-size: .75rem; font-weight: 750; }
+      #download-manager .manager-progress progress { width: min(100%, 15rem); height: .5rem; accent-color: #7ce3a0; }
       #download-manager .manager-toolbar { display: grid; gap: .7rem; margin-top: 1rem; }
       #download-manager .manager-selection-count { color: #9dacbd; font-size: .82rem; }
       #download-manager .manager-toolbar .actions { margin: 0; }
