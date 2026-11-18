@@ -34,7 +34,7 @@ from amulio.events import MonitorHealth, monitor_events, stop_monitor
 from amulio.i18n import Locale, resolve_locale, translate
 from amulio.local_media import discover_local_media
 from amulio.metadata import CinemetaClient, MetadataError
-from amulio.models import Candidate
+from amulio.models import AmuleFile, Candidate
 from amulio.observability import MetricsRegistry, configure_logging
 from amulio.profiles import AddonProfile, ProfilePreferences, ProfileStore
 from amulio.ranking import rank_results
@@ -865,6 +865,7 @@ async def delete_admin_session(request: Request, response: Response) -> None:
 async def managed_downloads(request: Request, api: ApiClient):
     """List queue and shared library for a verified administrator only."""
     _require_admin_session(request)
+    settings = _settings(request)
     try:
         downloads, shared = await asyncio.gather(api.downloads(), api.shared_files())
         active_hashes = {
@@ -872,16 +873,22 @@ async def managed_downloads(request: Request, api: ApiClient):
             for item in downloads
             if item.get("status") != "completed" and isinstance(item.get("hash"), str)
         }
+        library_items = [
+            item
+            for item in shared
+            if not isinstance(item.get("hash"), str) or item["hash"].lower() not in active_hashes
+        ]
+        verified_shared = await asyncio.gather(
+            *(
+                _verified_shared_library_item(item, settings=settings, api=api)
+                for item in library_items
+            )
+        )
         return {
             "downloads": [
                 public_download(item) for item in downloads if item.get("status") != "completed"
             ],
-            "shared": [
-                public_shared_file(item)
-                for item in shared
-                if not isinstance(item.get("hash"), str)
-                or item["hash"].lower() not in active_hashes
-            ],
+            "shared": [item for item in verified_shared if item is not None],
         }
     except (AmuleApiError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="aMule queue is unavailable") from exc
@@ -921,9 +928,54 @@ async def cancel_managed_downloads(
         raise HTTPException(status_code=503, detail="aMule cancellation failed") from exc
 
 
+def _safe_library_candidate_path(file_path: str, *, settings: Settings) -> Path:
+    """Validate a shared-file path even when its final file has just disappeared."""
+    candidate = Path(file_path)
+    resolved_path = candidate.resolve(strict=False)
+    try:
+        roots = [Path(root).resolve(strict=True) for root in settings.media_roots]
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=503, detail="Configured media storage is unavailable"
+        ) from None
+    if not any(resolved_path.is_relative_to(root) for root in roots):
+        raise HTTPException(status_code=403, detail="The media file is outside an allowed root")
+    return resolved_path
+
+
+def _shared_detail_matches(file_hash: str, item: dict, detail: AmuleFile | None) -> bool:
+    return (
+        detail is not None
+        and detail.hash.lower() == file_hash
+        and detail.name == item["name"]
+        and detail.size == item.get("size")
+        and Path(detail.name).name == detail.name
+    )
+
+
+async def _verified_shared_library_item(
+    item: dict, *, settings: Settings, api: AmuleApiClient
+) -> dict | None:
+    """Project only shared entries still backed by a verified local media file."""
+    public_item = public_shared_file(item)
+    detail = await api.shared_file(public_item["hash"])
+    if not _shared_detail_matches(public_item["hash"], item, detail):
+        return None
+    assert detail is not None
+    try:
+        path = _safe_media_path(str(Path(detail.path) / detail.name), settings=settings)
+        if path.stat().st_size != detail.size:
+            return None
+    except (HTTPException, OSError):
+        # aMule's shared index reload is asynchronous; never return an entry
+        # whose backing file has vanished or cannot be safely verified.
+        return None
+    return public_item
+
+
 async def _revalidated_library_paths(
     hashes: list[str], *, settings: Settings, api: AmuleApiClient
-) -> list[tuple[str, Path]]:
+) -> list[tuple[str, Path | None]]:
     """Resolve only currently shared, regular files inside configured media roots."""
     shared = {
         item["hash"].lower(): item
@@ -936,21 +988,32 @@ async def _revalidated_library_paths(
             detail="One or more selected files are no longer shared",
         )
     details = await asyncio.gather(*(api.shared_file(file_hash) for file_hash in hashes))
-    resolved: list[tuple[str, Path]] = []
+    resolved: list[tuple[str, Path | None]] = []
     for file_hash, detail in zip(hashes, details, strict=True):
         item = shared[file_hash]
-        if (
-            detail is None
-            or detail.hash.lower() != file_hash
-            or detail.name != item["name"]
-            or detail.size != item.get("size")
-        ):
+        if not _shared_detail_matches(file_hash, item, detail):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="One or more selected files changed before deletion",
             )
-        path = _safe_media_path(str(Path(detail.path) / detail.name), settings=settings)
-        if path.name != detail.name or path.stat().st_size != detail.size:
+        assert detail is not None
+        candidate = _safe_library_candidate_path(
+            str(Path(detail.path) / detail.name), settings=settings
+        )
+        try:
+            path = _safe_media_path(str(candidate), settings=settings)
+            size_matches = path.name == detail.name and path.stat().st_size == detail.size
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                # The selected entry is stale, not a failed delete.  Keep its
+                # verified metadata so the caller can request an index reload.
+                resolved.append((file_hash, None))
+                continue
+            raise
+        except OSError:
+            resolved.append((file_hash, None))
+            continue
+        if not size_matches:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="One or more selected files changed before deletion",
@@ -971,22 +1034,48 @@ async def delete_managed_library(body: DownloadSelectionRequest, request: Reques
         raise HTTPException(status_code=503, detail="aMule shared library is unavailable") from exc
 
     deleted: list[str] = []
+    already_absent: list[str] = []
     failures: list[str] = []
     for file_hash, path in paths:
+        if path is None:
+            already_absent.append(file_hash)
+            continue
         try:
             path.unlink()
             deleted.append(file_hash)
+        except FileNotFoundError:
+            # A concurrent removal is equivalent to a successful idempotent
+            # delete, provided the selection was safely revalidated above.
+            already_absent.append(file_hash)
         except OSError:
             failures.append(file_hash)
 
-    if deleted:
+    reload_requested = bool(deleted or already_absent)
+    reload_ok = False
+    if reload_requested:
         try:
             await api.reload_shared_files()
+            reload_ok = True
         except AmuleApiError as exc:
+            logger.info(
+                "Completed-library deletion selected=%d unlinked=%d already_absent=%d failed=%d reload=failed",
+                len(hashes),
+                len(deleted),
+                len(already_absent),
+                len(failures),
+            )
             raise HTTPException(
                 status_code=503,
                 detail="Library files may have been deleted but aMule could not refresh its shared index",
             ) from exc
+    logger.info(
+        "Completed-library deletion selected=%d unlinked=%d already_absent=%d failed=%d reload=%s",
+        len(hashes),
+        len(deleted),
+        len(already_absent),
+        len(failures),
+        "ok" if reload_ok else "not-needed",
+    )
     if failures:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1201,6 +1290,7 @@ def _configuration_page(
       const managerNetworkStates = document.getElementById("manager-network-states");
       let managerCsrf = null;
       let managerFeedbackTimer = null;
+      const deletedLibraryHashes = new Set();
       const managerApiBase = "admin";
       const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
       const formatBytes = (value) => {{
@@ -1247,8 +1337,9 @@ def _configuration_page(
         managerDownloads.innerHTML = data.downloads.length
           ? `<ul class="manager-download-list">${{data.downloads.map((item) => `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(item.size_done)}} / ${{formatBytes(item.size)}}</span></span></label></li>`).join("")}}</ul>`
           : `<p class="manager-empty">${{managerMessages.manager_empty}}</p>`;
-        managerShared.innerHTML = data.shared.length
-          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><label><input class="manager-library" type="checkbox" value="${{managerEscape(item.hash)}}" data-size="${{managerEscape(item.size)}}"><span><span class="manager-library-name">${{managerEscape(displayLibraryName(item.name))}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span></span></label><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
+        const visibleShared = data.shared.filter((item) => !deletedLibraryHashes.has(String(item.hash).toLowerCase()));
+        managerShared.innerHTML = visibleShared.length
+          ? `<ul class="manager-library-list">${{visibleShared.map((item) => `<li class="manager-library-card"><label><input class="manager-library" type="checkbox" value="${{managerEscape(item.hash)}}" data-size="${{managerEscape(item.size)}}"><span><span class="manager-library-name">${{managerEscape(displayLibraryName(item.name))}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span></span></label><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
           : `<p class="manager-library-empty">${{managerMessages.manager_library_empty}}</p>`;
         managerContent.hidden = false;
         updateManagerControls();
@@ -1329,6 +1420,9 @@ def _configuration_page(
             method: "DELETE", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes }})
           }});
           if (!response.ok) throw new Error("delete");
+          hashes.forEach((hash) => deletedLibraryHashes.add(hash.toLowerCase()));
+          selected.forEach((input) => input.closest(".manager-library-card")?.remove());
+          updateLibraryControls();
           await loadManager();
           setManagerFeedback(managerMessages.manager_delete_completed);
         }} catch {{ setManagerFeedback(managerMessages.manager_delete_failed, "error"); }}

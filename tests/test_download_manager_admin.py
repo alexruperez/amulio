@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from amulio.app import app
 from amulio.config import get_settings
+from amulio.models import AmuleFile
 
 
 class FakeAmuleApi:
@@ -27,6 +28,9 @@ class FakeAmuleApi:
 
     async def shared_files(self):
         return self.shared_items
+
+    async def shared_file(self, _file_hash) -> AmuleFile | None:
+        return None
 
     async def pause_downloads(self, hashes):
         self.calls.append(("pause", hashes))
@@ -87,7 +91,7 @@ def test_download_manager_requires_admin_session_csrf_and_active_selections(monk
                     "status": "downloading",
                 }
             ],
-            "shared": [{"hash": "b" * 32, "name": "finished.mkv", "size": 200}],
+            "shared": [],
         }
         assert (
             client.patch(
@@ -168,4 +172,92 @@ def test_manager_is_hidden_when_admin_password_is_unavailable(monkeypatch):
     with TestClient(app) as client:
         assert 'id="download-manager"' not in client.get("/configure").text
         assert client.get("/admin/downloads").status_code == 401
+    get_settings.cache_clear()
+
+
+class StaleSharedLibraryApi(FakeAmuleApi):
+    def __init__(self, media_root):
+        super().__init__()
+        self.download_items = []
+        self.media_root = media_root
+        self.file_hash = "b" * 32
+        self.shared_items = [{"hash": self.file_hash, "name": "finished.mkv", "size": 200}]
+        self.reloads = 0
+        (media_root / "finished.mkv").write_bytes(b"x" * 200)
+
+    async def shared_file(self, file_hash):
+        if file_hash.lower() != self.file_hash:
+            return None
+        return AmuleFile(
+            hash=self.file_hash,
+            name="finished.mkv",
+            size=200,
+            path=str(self.media_root),
+        )
+
+    async def reload_shared_files(self):
+        self.reloads += 1
+
+
+def test_completed_library_delete_is_idempotent_and_hides_stale_shared_entries(
+    monkeypatch, tmp_path
+):
+    configure_admin(monkeypatch)
+    media_root = tmp_path / "incoming"
+    media_root.mkdir()
+    monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(media_root))
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        fake = StaleSharedLibraryApi(media_root)
+        app.state.amule_api = fake
+        csrf = login(client)
+
+        assert client.get("/admin/downloads").json()["shared"] == fake.shared_items
+        first = client.request(
+            "DELETE",
+            "/admin/library",
+            headers={"X-CSRF-Token": csrf},
+            json={"hashes": [fake.file_hash]},
+        )
+        assert first.status_code == 200
+        assert not (media_root / "finished.mkv").exists()
+        assert fake.reloads == 1
+
+        # aMule may temporarily retain this item after its asynchronous reload,
+        # but it must not be returned to the manager without a real media file.
+        assert client.get("/admin/downloads").json()["shared"] == []
+
+        repeat = client.request(
+            "DELETE",
+            "/admin/library",
+            headers={"X-CSRF-Token": csrf},
+            json={"hashes": [fake.file_hash]},
+        )
+        assert repeat.status_code == 200
+        assert repeat.json() == {"results": [{"id": fake.file_hash, "ok": True}]}
+        assert fake.reloads == 2
+    get_settings.cache_clear()
+
+
+def test_completed_library_delete_rejects_a_shared_path_outside_media_roots(monkeypatch, tmp_path):
+    configure_admin(monkeypatch)
+    media_root = tmp_path / "incoming"
+    outside_root = tmp_path / "outside"
+    media_root.mkdir()
+    outside_root.mkdir()
+    monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(media_root))
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        fake = StaleSharedLibraryApi(outside_root)
+        app.state.amule_api = fake
+        csrf = login(client)
+        response = client.request(
+            "DELETE",
+            "/admin/library",
+            headers={"X-CSRF-Token": csrf},
+            json={"hashes": [fake.file_hash]},
+        )
+        assert response.status_code == 403
+        assert (outside_root / "finished.mkv").exists()
+        assert fake.reloads == 0
     get_settings.cache_clear()

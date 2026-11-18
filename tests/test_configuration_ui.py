@@ -235,6 +235,8 @@ def test_download_manager_mobile_states_are_localized_and_safe(
         page.locator("#manager-library-delete").click()
     library_request = library_delete_request.value
     expect(page.locator("#manager-feedback")).to_contain_text("Archivos completados eliminados")
+    expect(page.locator(".manager-library")).to_have_count(0)
+    expect(page.locator("#manager-library-toolbar")).to_be_hidden()
     assert library_mutations == ["DELETE"]
     assert len(delete_dialogs) == 1
     assert "1 archivos seleccionados (1 KiB)" in delete_dialogs[0]
