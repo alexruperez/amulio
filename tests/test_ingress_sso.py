@@ -26,6 +26,7 @@ def test_ingress_sso_requires_a_trusted_proxy_and_identity_header(monkeypatch):
         assert "HttpOnly" in accepted.headers["set-cookie"]
         assert "SameSite=strict" in accepted.headers["set-cookie"]
         assert "Path=/api/hassio_ingress/abc123/admin" in accepted.headers["set-cookie"]
+        assert "Secure" not in accepted.headers["set-cookie"]
         session_cookie = accepted.cookies.get("amulio_admin")
         assert session_cookie is not None
         deleted = trusted.request(
