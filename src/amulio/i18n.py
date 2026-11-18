@@ -153,7 +153,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "reachability."
         ),
         "manager_network_unavailable": "Network status is unavailable.",
-        "manager_peers": "Peers",
         "manager_action_completed": "{action} request completed.",
         "manager_pause_completed": "Pause request completed.",
         "manager_resume_completed": "Resume request completed.",
@@ -317,7 +316,6 @@ MESSAGES: dict[Locale, dict[str, str]] = {
             "mapeo del host, NAT ni la accesibilidad pública."
         ),
         "manager_network_unavailable": "El estado de red no está disponible.",
-        "manager_peers": "Pares",
         "manager_action_completed": "Solicitud de {action} completada.",
         "manager_pause_completed": "Solicitud de pausa completada.",
         "manager_resume_completed": "Solicitud de reanudación completada.",

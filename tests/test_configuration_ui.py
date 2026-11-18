@@ -133,7 +133,14 @@ def test_download_manager_mobile_states_are_localized_and_safe(
         mutations.append(route.request.method)
         route.fulfill(status=200, json={"results": []})
 
+    def mock_network_status(route):
+        route.fulfill(
+            status=200,
+            json={"ed2k": "connected", "kad": "connected", "peer_access": "unknown"},
+        )
+
     page.route("**/admin/downloads", mock_downloads)
+    page.route("**/configure/status", mock_network_status)
     page.set_extra_http_headers(
         {
             "X-Remote-User-ID": "owner",
@@ -169,9 +176,18 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     expect(page.locator('[data-manager-action="pause"]')).to_be_disabled()
     expect(page.locator("#manager-cancel-open")).to_be_disabled()
     expect(page.locator(".manager-library-card")).to_contain_text("1 KiB")
+    expect(page.locator(".manager-library-name")).to_have_text("Original Release Name")
     expect(page.locator(".manager-library-card details")).to_contain_text(
         "Original.Release.Name.mkv"
     )
+
+    page.locator("#manager-network > summary").click()
+    expect(page.locator(".manager-network-state")).to_have_count(2)
+    expect(page.locator("#manager-network-states")).not_to_contain_text("Peers")
+    network_summary = page.locator("#manager-network > summary").bounding_box()
+    network_states = page.locator("#manager-network-states").bounding_box()
+    assert network_summary is not None and network_states is not None
+    assert network_states["y"] >= network_summary["y"] + network_summary["height"] + 12
 
     page.locator(".manager-download").check()
     expect(page.locator('[data-manager-action="pause"]')).to_be_enabled()
