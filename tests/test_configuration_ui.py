@@ -28,6 +28,7 @@ def configuration_server(tmp_path: Path) -> Iterator[str]:
         "AMULIO_TOKEN_SECRET": "s" * 32,
         "AMULIO_ADMIN_PASSWORD": "a" * 32,
         "AMULIO_ADMIN_BOOTSTRAP_TOKEN": "b" * 32,
+        "AMULIO_TRUSTED_INGRESS_PROXY_SOURCES": "127.0.0.1/32",
         "AMULIO_ALLOWED_MEDIA_ROOTS": str(tmp_path),
         "AMULE_API_ADMIN_PASSWORD": "test-password",
         "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
@@ -81,22 +82,6 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
         + "/manifest.json"
     )
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    tip_box = page.locator(".hint").bounding_box()
-    manager_box = page.locator("#download-manager").bounding_box()
-    assert tip_box is not None and manager_box is not None
-    assert manager_box["y"] >= tip_box["y"] + tip_box["height"] + 20
-    expect(page.locator("#download-manager summary")).to_contain_text("Queue and library")
-
-    page.goto(configuration_server + "#admin-bootstrap=" + "b" * 32)
-    page.locator("#download-manager summary").click()
-    with page.expect_response(
-        lambda response: (
-            response.url.endswith("/admin/bootstrap") and response.request.method == "POST"
-        )
-    ) as bootstrap_response:
-        page.locator("#manager-bootstrap-open").click()
-    assert bootstrap_response.value.status == 200
-    assert "#admin-bootstrap" not in page.url
 
     profile_summary = page.locator(".profile-settings summary")
     profile_summary.focus()
@@ -131,3 +116,85 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
     second_label = page.locator(".profile-grid label").nth(1).bounding_box()
     assert first_label is not None and second_label is not None
     assert first_label["x"] == second_label["x"]
+
+
+@pytest.mark.ui
+def test_download_manager_mobile_states_are_localized_and_safe(
+    configuration_server: str, browser: Browser
+):
+    page: Page = browser.new_page(viewport={"width": 375, "height": 812})
+    queue = {"downloads": [], "shared": []}
+    mutations: list[str] = []
+
+    def mock_downloads(route):
+        if route.request.method == "GET":
+            route.fulfill(status=200, json=queue)
+            return
+        mutations.append(route.request.method)
+        route.fulfill(status=200, json={"results": []})
+
+    page.route("**/admin/downloads", mock_downloads)
+    page.set_extra_http_headers(
+        {
+            "X-Remote-User-ID": "owner",
+            "X-Ingress-Path": "/api/hassio_ingress/test",
+        }
+    )
+    ingress_url = configuration_server.rsplit("/", 2)[0] + "/configure?lang=es"
+    page.goto(ingress_url)
+    page.locator("#download-manager > summary").click()
+    page.locator("#manager-load").click()
+    expect(page.locator("#manager-session")).to_be_visible()
+    expect(page.locator("#manager-feedback")).to_have_attribute("aria-live", "polite")
+    expect(page.locator(".manager-empty")).to_contain_text("No hay descargas activas")
+    expect(page.locator("#manager-toolbar")).to_be_hidden()
+    expect(page.locator("#manager-cancel-panel")).to_be_hidden()
+
+    queue.update(
+        {
+            "downloads": [
+                {
+                    "hash": "a" * 32,
+                    "name": "Una-descarga-muy-larga-para-comprobar-el-ajuste-en-movil.mkv",
+                    "size": 2048,
+                    "size_done": 1024,
+                    "status": "downloading",
+                }
+            ],
+            "shared": [{"hash": "b" * 32, "name": "Original.Release.Name.mkv", "size": 1024}],
+        }
+    )
+    page.locator("#manager-refresh").click()
+    expect(page.locator(".manager-download")).to_have_count(1)
+    expect(page.locator('[data-manager-action="pause"]')).to_be_disabled()
+    expect(page.locator("#manager-cancel-open")).to_be_disabled()
+    expect(page.locator(".manager-library-card")).to_contain_text("1 KiB")
+    expect(page.locator(".manager-library-card details")).to_contain_text(
+        "Original.Release.Name.mkv"
+    )
+
+    page.locator(".manager-download").check()
+    expect(page.locator('[data-manager-action="pause"]')).to_be_enabled()
+    expect(page.locator("#manager-cancel-open")).to_be_enabled()
+    expect(page.locator("#manager-selection-count")).to_contain_text("1 seleccionadas")
+    page.locator("#manager-cancel-open").click()
+    expect(page.locator("#manager-cancel-panel")).to_be_visible()
+    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
+    page.locator("#manager-confirmation").fill("CANCELAR 2")
+    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
+    page.locator("#manager-confirmation").fill("CANCELAR 1")
+    expect(page.locator("#manager-cancel-confirm")).to_be_enabled()
+    assert mutations == []
+    with page.expect_request(
+        lambda request: request.url.endswith("/admin/downloads") and request.method == "DELETE"
+    ) as delete_request:
+        page.locator("#manager-cancel-confirm").click()
+    request = delete_request.value
+    expect(page.locator("#manager-feedback")).to_contain_text("Cancelación completada")
+    assert mutations == ["DELETE"]
+    assert request.header_value("X-CSRF-Token")
+    assert request.post_data_json == {
+        "hashes": ["a" * 32],
+        "confirmation": "CANCELAR 1",
+    }
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

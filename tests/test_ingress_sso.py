@@ -85,6 +85,8 @@ def test_ingress_configuration_hides_generic_credentials(monkeypatch):
             return None
 
     _configure(monkeypatch)
+    monkeypatch.setenv("AMULIO_ADMIN_PASSWORD", "a" * 32)
+    get_settings.cache_clear()
     ingress_headers = {
         "X-Remote-User-ID": "owner",
         "X-Ingress-Path": "/api/hassio_ingress/abc123",
@@ -115,4 +117,14 @@ def test_ingress_configuration_hides_generic_credentials(monkeypatch):
     assert "Open download manager" not in public.text
     assert f'data-status-url="http://127.0.0.1:8000/{"i" * 24}/configure/status"' in public.text
     assert rejected_status.status_code == 404
+
+    with TestClient(app, client=("198.51.100.8", 4567)) as direct_with_password:
+        tokenized = direct_with_password.get(f"/{'i' * 24}/configure")
+        public_with_password = direct_with_password.get("/configure")
+    for response in (tokenized, public_with_password):
+        assert 'id="download-manager"' not in response.text
+        assert 'id="manager-password"' not in response.text
+        assert 'id="manager-bootstrap"' not in response.text
+        assert "managerApiBase" not in response.text
+        assert "managerCancelConfirm" not in response.text
     get_settings.cache_clear()

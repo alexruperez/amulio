@@ -166,6 +166,6 @@ def test_manager_is_hidden_when_admin_password_is_unavailable(monkeypatch):
     monkeypatch.delenv("AMULIO_ADMIN_PASSWORD", raising=False)
     get_settings.cache_clear()
     with TestClient(app) as client:
-        assert 'id="download-manager" hidden' in client.get("/configure").text
+        assert 'id="download-manager"' not in client.get("/configure").text
         assert client.get("/admin/downloads").status_code == 401
     get_settings.cache_clear()

@@ -97,13 +97,67 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "readiness_hint_connecting": (
             "Kad is still connecting; remote results can take a few minutes to appear."
         ),
-        "readiness_hint_limited": (
-            "Inbound peer ports are disabled; Low ID and firewalled Kad are expected."
+        "readiness_hint_limited": "",
+        "readiness_hint_peer_unknown": (
+            "Port publication is configured in Home Assistant Network. This app cannot verify "
+            "host mappings, router forwarding, NAT, or public reachability."
         ),
         "readiness_hint_unavailable": (
             "aMule is unavailable. Check the daemon and its private amuleapi connection."
         ),
         "readiness_hint_ready": "aMule is ready for local playback and remote discovery.",
+        "manager_title": "Download manager",
+        "manager_subtitle": "Queue and library",
+        "manager_intro": "Manage active downloads. Completed shared files are read-only.",
+        "manager_ingress_auth": "Home Assistant Ingress authorizes this manager session.",
+        "manager_bootstrap_intro": (
+            "Open the admin manager with an operator-provided management link. Its bootstrap "
+            "token stays in the URL fragment and is never included in a request URL."
+        ),
+        "manager_bootstrap_open": "Open admin manager",
+        "manager_bootstrap_copy": "Copy management link",
+        "manager_bootstrap_missing": "Open the operator-provided management link first.",
+        "manager_bootstrap_copied": (
+            "Management link copied. Its token remains in the URL fragment."
+        ),
+        "manager_bootstrap_copy_failed": "Could not copy the management link.",
+        "manager_open": "Open download manager",
+        "manager_load": "Load queue and library",
+        "manager_connected": "Manager connected",
+        "manager_refresh": "Refresh",
+        "manager_loading": "Loading manager…",
+        "manager_loaded": "Queue refreshed.",
+        "manager_load_failed": "Could not authenticate or load the queue.",
+        "manager_empty": "No active downloads.",
+        "manager_selected": "{count} selected",
+        "manager_pause": "Pause selected",
+        "manager_resume": "Resume selected",
+        "manager_cancel": "Cancel {count} downloads…",
+        "manager_cancel_title": "Cancel selected downloads",
+        "manager_cancel_warning": (
+            "This removes the selected active downloads. Completed files are not affected."
+        ),
+        "manager_cancel_prompt": "Type {confirmation} to enable cancellation.",
+        "manager_cancel_confirm": "Cancel downloads",
+        "manager_cancel_failed": (
+            "Cancellation failed. Type the exact confirmation and refresh selections."
+        ),
+        "manager_update_failed": "Queue update failed; refresh selections.",
+        "manager_library": "Completed shared library",
+        "manager_library_empty": "No completed shared files.",
+        "manager_file_details": "Technical filename",
+        "manager_network": "Network and node status",
+        "manager_network_hint": (
+            "eD2K and Kad reflect daemon status. Publish listener ports in Home Assistant "
+            "Network if needed; this page cannot verify host mapping, NAT, or public "
+            "reachability."
+        ),
+        "manager_network_unavailable": "Network status is unavailable.",
+        "manager_peers": "Peers",
+        "manager_action_completed": "{action} request completed.",
+        "manager_pause_completed": "Pause request completed.",
+        "manager_resume_completed": "Resume request completed.",
+        "manager_cancel_completed": "Cancellation completed.",
     },
     "es": {
         "page_title": "Instala aMulio para Stremio",
@@ -199,9 +253,11 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "readiness_hint_connecting": (
             "Kad sigue conectando; los resultados remotos pueden tardar unos minutos en aparecer."
         ),
-        "readiness_hint_limited": (
-            "Los puertos de pares entrantes están desactivados; se espera Low ID y Kad "
-            "con firewall."
+        "readiness_hint_limited": "",
+        "readiness_hint_peer_unknown": (
+            "La publicación de puertos se configura en Network de Home Assistant. Esta app no "
+            "puede verificar los mapeos del host, el reenvío del router, NAT ni la "
+            "accesibilidad pública."
         ),
         "readiness_hint_unavailable": (
             "aMule no está disponible. Comprueba el daemon y su conexión privada con amuleapi."
@@ -209,6 +265,63 @@ MESSAGES: dict[Locale, dict[str, str]] = {
         "readiness_hint_ready": (
             "aMule está listo para reproducir archivos locales y descubrir contenido remoto."
         ),
+        "manager_title": "Gestor de descargas",
+        "manager_subtitle": "Cola y biblioteca",
+        "manager_intro": (
+            "Gestiona las descargas activas. Los archivos compartidos completados son de solo "
+            "lectura."
+        ),
+        "manager_ingress_auth": "Home Assistant Ingress autoriza esta sesión del gestor.",
+        "manager_bootstrap_intro": (
+            "Abre el gestor de administración con un enlace proporcionado por el operador. Su "
+            "token de inicio permanece en el fragmento de la URL y nunca se incluye en una URL "
+            "de solicitud."
+        ),
+        "manager_bootstrap_open": "Abrir gestor de administración",
+        "manager_bootstrap_copy": "Copiar enlace de administración",
+        "manager_bootstrap_missing": "Abre primero el enlace de administración proporcionado.",
+        "manager_bootstrap_copied": (
+            "Enlace de administración copiado. Su token permanece en el fragmento de la URL."
+        ),
+        "manager_bootstrap_copy_failed": "No se pudo copiar el enlace de administración.",
+        "manager_open": "Abrir gestor de descargas",
+        "manager_load": "Cargar cola y biblioteca",
+        "manager_connected": "Gestor conectado",
+        "manager_refresh": "Actualizar",
+        "manager_loading": "Cargando gestor…",
+        "manager_loaded": "Cola actualizada.",
+        "manager_load_failed": "No se pudo autenticar ni cargar la cola.",
+        "manager_empty": "No hay descargas activas.",
+        "manager_selected": "{count} seleccionadas",
+        "manager_pause": "Pausar seleccionadas",
+        "manager_resume": "Reanudar seleccionadas",
+        "manager_cancel": "Cancelar {count} descargas…",
+        "manager_cancel_title": "Cancelar descargas seleccionadas",
+        "manager_cancel_warning": (
+            "Esto elimina las descargas activas seleccionadas. Los archivos completados no se "
+            "modifican."
+        ),
+        "manager_cancel_prompt": "Escribe {confirmation} para activar la cancelación.",
+        "manager_cancel_confirm": "Cancelar descargas",
+        "manager_cancel_failed": (
+            "La cancelación falló. Escribe la confirmación exacta y actualiza las selecciones."
+        ),
+        "manager_update_failed": "La actualización de la cola falló; actualiza las selecciones.",
+        "manager_library": "Biblioteca compartida completada",
+        "manager_library_empty": "No hay archivos compartidos completados.",
+        "manager_file_details": "Nombre técnico del archivo",
+        "manager_network": "Estado de red y nodo",
+        "manager_network_hint": (
+            "eD2K y Kad reflejan el estado del daemon. Publica los puertos de escucha en "
+            "Network de Home Assistant si es necesario; esta página no puede verificar el "
+            "mapeo del host, NAT ni la accesibilidad pública."
+        ),
+        "manager_network_unavailable": "El estado de red no está disponible.",
+        "manager_peers": "Pares",
+        "manager_action_completed": "Solicitud de {action} completada.",
+        "manager_pause_completed": "Solicitud de pausa completada.",
+        "manager_resume_completed": "Solicitud de reanudación completada.",
+        "manager_cancel_completed": "Cancelación completada.",
     },
 }
 

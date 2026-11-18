@@ -716,13 +716,9 @@ async def _configuration_status(settings: Settings, api: ApiClient) -> Response:
         "amuleapi": "connected" if amule_status else "unavailable",
         "ed2k": _connection_state(amule_status.get("ed2k")),
         "kad": _connection_state(amule_status.get("kad")),
-        "peer_access": (
-            "configured"
-            if settings.inbound_peer_ports_enabled is True
-            else "limited"
-            if settings.inbound_peer_ports_enabled is False
-            else "unknown"
-        ),
+        # Home Assistant owns port publication. The core cannot inspect the
+        # effective host mapping or router/NAT state, so do not make a claim.
+        "peer_access": "unknown",
         "incoming_storage": "ready" if storage_ready else "unavailable",
         "public_url": "configured",
     }
@@ -995,21 +991,25 @@ def _configuration_page(
     profile_disabled = " disabled" if not profile_management_enabled else ""
     profile_hidden = " hidden" if not profile_management_enabled else ""
     manager_hidden = " hidden" if settings.admin_password is None and not ingress_sso else ""
+
+    def t(key: str) -> str:
+        return html.escape(translate(locale, key))
+
     manager_auth = (
-        "<p>Home Assistant Ingress authorizes this manager session.</p>"
-        '<div class="actions"><button class="button" type="button" id="manager-load">Open download manager</button></div>'
+        f"<p>{t('manager_ingress_auth')}</p>"
+        f'<div class="actions"><button class="button" type="button" id="manager-load">{t("manager_open")}</button></div>'
         if ingress_sso
-        else '<label for="manager-password">Administrator password'
+        else f'<label for="manager-password">{t("admin_password")}'
         '<input id="manager-password" type="password" autocomplete="current-password"'
-        f'{profile_disabled}></label><div class="actions"><button class="button" type="button" id="manager-load"{profile_disabled}>Load queue and library</button></div>'
+        f'{profile_disabled}></label><div class="actions"><button class="button" type="button" id="manager-load"{profile_disabled}>{t("manager_load")}</button></div>'
     )
     bootstrap_action = (
-        """
+        f"""
             <div id="manager-bootstrap">
-              <p>Open the admin manager with an operator-provided management link. Its bootstrap token stays in the URL fragment and is never included in a request URL.</p>
+              <p>{t("manager_bootstrap_intro")}</p>
               <div class="actions">
-                <button class="button secondary" type="button" id="manager-bootstrap-open">Open admin manager</button>
-                <button class="button secondary" type="button" id="manager-bootstrap-copy">Copy management link</button>
+                <button class="button secondary" type="button" id="manager-bootstrap-open">{t("manager_bootstrap_open")}</button>
+                <button class="button secondary" type="button" id="manager-bootstrap-copy">{t("manager_bootstrap_copy")}</button>
               </div>
             </div>"""
         if settings.admin_password is not None
@@ -1017,9 +1017,6 @@ def _configuration_page(
         and not ingress_sso
         else ""
     )
-
-    def t(key: str) -> str:
-        return html.escape(translate(locale, key))
 
     status_labels = json.dumps(
         {
@@ -1037,6 +1034,40 @@ def _configuration_page(
         },
         ensure_ascii=False,
     ).replace("</", "<\\/")
+    manager_messages = json.dumps(
+        {
+            key: translate(locale, key)
+            for key in (
+                "manager_connected",
+                "manager_bootstrap_missing",
+                "manager_bootstrap_copied",
+                "manager_bootstrap_copy_failed",
+                "manager_refresh",
+                "manager_loading",
+                "manager_loaded",
+                "manager_load_failed",
+                "manager_empty",
+                "manager_selected",
+                "manager_pause",
+                "manager_resume",
+                "manager_cancel",
+                "manager_cancel_title",
+                "manager_cancel_warning",
+                "manager_cancel_prompt",
+                "manager_cancel_confirm",
+                "manager_cancel_failed",
+                "manager_update_failed",
+                "manager_library_empty",
+                "manager_file_details",
+                "manager_network_unavailable",
+                "manager_peers",
+                "manager_pause_completed",
+                "manager_resume_completed",
+                "manager_cancel_completed",
+            )
+        },
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
     language_links = " ".join(
         '<a href="?lang={language}"{current}>{label}</a>'.format(
             language=language,
@@ -1045,6 +1076,302 @@ def _configuration_page(
         )
         for language in ("en", "es")
     )
+    # The manager is an Ingress-only administrative surface.
+    manager_section = (
+        f"""\
+        <details class="manager-settings" id="download-manager"{manager_hidden}>
+          <summary><span class="manager-title">{t("manager_title")}</span><span class="manager-subtitle">{t("manager_subtitle")}</span></summary>
+          <div class="profile-content">
+            <p class="manager-intro">{t("manager_intro")}</p>
+            {bootstrap_action}
+            <div id="manager-auth">{manager_auth}</div>
+            <div id="manager-session" class="manager-session" hidden>
+              <strong>{t("manager_connected")}</strong><button class="button secondary" type="button" id="manager-refresh">{t("manager_refresh")}</button>
+            </div>
+            <div id="manager-feedback" class="profile-feedback manager-feedback" role="status" aria-live="polite"></div>
+            <section id="manager-content" hidden>
+              <div id="manager-downloads"></div>
+              <div id="manager-toolbar" class="manager-toolbar" hidden>
+                <span id="manager-selection-count" class="manager-selection-count"></span>
+                <div class="actions">
+                  <button class="button secondary" type="button" data-manager-action="pause" disabled>{t("manager_pause")}</button>
+                  <button class="button secondary" type="button" data-manager-action="resume" disabled>{t("manager_resume")}</button>
+                  <button class="button destructive" type="button" id="manager-cancel-open" data-destructive="true" disabled></button>
+                </div>
+                <section id="manager-cancel-panel" class="manager-cancel-panel" hidden aria-labelledby="manager-cancel-title">
+                  <h4 id="manager-cancel-title"></h4><p id="manager-cancel-warning"></p>
+                  <label id="manager-cancel-prompt" for="manager-confirmation"></label>
+                  <input id="manager-confirmation" type="text" autocomplete="off">
+                  <button class="button destructive" type="button" id="manager-cancel-confirm" data-destructive="true" disabled></button>
+                </section>
+              </div>
+              <details class="manager-network" id="manager-network">
+                <summary>{t("manager_network")}</summary>
+                <div class="manager-network-body">
+                  <div id="manager-network-states" class="manager-network-states"></div>
+                  <p>{t("manager_network_hint")}</p>
+                </div>
+              </details>
+              <h3>{t("manager_library")}</h3><div id="manager-shared"></div>
+            </section>
+          </div>
+        </details>
+    """
+        if ingress_sso
+        else ""
+    )
+
+    manager_script = (
+        f"""\
+      const managerLoad = document.getElementById("manager-load");
+      const managerRefresh = document.getElementById("manager-refresh");
+      const managerBootstrapOpen = document.getElementById("manager-bootstrap-open");
+      const managerBootstrapCopy = document.getElementById("manager-bootstrap-copy");
+      const managerPassword = document.getElementById("manager-password");
+      const ingressSso = {str(ingress_sso).lower()};
+      const managerMessages = {manager_messages};
+      const managerFeedback = document.getElementById("manager-feedback");
+      const managerAuth = document.getElementById("manager-auth");
+      const managerSession = document.getElementById("manager-session");
+      const managerContent = document.getElementById("manager-content");
+      const managerDownloads = document.getElementById("manager-downloads");
+      const managerShared = document.getElementById("manager-shared");
+      const managerToolbar = document.getElementById("manager-toolbar");
+      const managerSelectionCount = document.getElementById("manager-selection-count");
+      const managerCancelOpen = document.getElementById("manager-cancel-open");
+      const managerCancelPanel = document.getElementById("manager-cancel-panel");
+      const managerCancelTitle = document.getElementById("manager-cancel-title");
+      const managerCancelWarning = document.getElementById("manager-cancel-warning");
+      const managerCancelPrompt = document.getElementById("manager-cancel-prompt");
+      const managerCancelConfirm = document.getElementById("manager-cancel-confirm");
+      const managerConfirmation = document.getElementById("manager-confirmation");
+      const managerNetworkStates = document.getElementById("manager-network-states");
+      let managerCsrf = null;
+      let managerFeedbackTimer = null;
+      // Ingress exposes the app under a per-session prefix. A parent-relative
+      // URL would escape that prefix; direct and tokenized pages retain the
+      // parent-relative API location.
+      const managerApiBase = ingressSso ? "admin" : "../admin";
+      const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
+      const formatBytes = (value) => {{
+        const bytes = Number(value);
+        if (!Number.isFinite(bytes) || bytes < 0) return "—";
+        const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+        let index = 0;
+        let formatted = bytes;
+        while (formatted >= 1024 && index < units.length - 1) {{ formatted /= 1024; index += 1; }}
+        return `${{formatted.toLocaleString(undefined, {{ maximumFractionDigits: index ? 1 : 0 }})}} ${{units[index]}}`;
+      }};
+      const selectedDownloads = () => Array.from(managerDownloads.querySelectorAll(".manager-download:checked")).map((input) => input.value);
+      const cancellationPhrase = () => `CANCELAR ${{selectedDownloads().length}}`;
+      function setManagerFeedback(message, kind = "success", transient = true) {{
+        window.clearTimeout(managerFeedbackTimer);
+        managerFeedback.dataset.kind = kind;
+        managerFeedback.textContent = message;
+        if (transient && message) managerFeedbackTimer = window.setTimeout(() => {{ managerFeedback.textContent = ""; }}, 3200);
+      }}
+      function resetCancellation() {{
+        managerCancelPanel.hidden = true;
+        managerConfirmation.value = "";
+        managerCancelConfirm.disabled = true;
+      }}
+      function updateManagerControls() {{
+        const count = selectedDownloads().length;
+        managerToolbar.hidden = !managerDownloads.querySelector(".manager-download");
+        managerSelectionCount.textContent = managerMessages.manager_selected.replace("{{count}}", count);
+        managerToolbar.querySelectorAll('[data-manager-action="pause"], [data-manager-action="resume"]').forEach((button) => {{ button.disabled = !count; }});
+        managerCancelOpen.disabled = !count;
+        managerCancelOpen.textContent = managerMessages.manager_cancel.replace("{{count}}", count);
+        managerCancelTitle.textContent = managerMessages.manager_cancel_title;
+        managerCancelWarning.textContent = managerMessages.manager_cancel_warning;
+        managerCancelPrompt.textContent = managerMessages.manager_cancel_prompt.replace("{{confirmation}}", cancellationPhrase());
+        resetCancellation();
+      }}
+      function renderManager(data) {{
+        managerDownloads.innerHTML = data.downloads.length
+          ? `<ul class="manager-download-list">${{data.downloads.map((item) => `<li class="manager-download-row"><label><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}"><span><span class="manager-download-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{managerEscape(item.status)}} · ${{formatBytes(item.size_done)}} / ${{formatBytes(item.size)}}</span></span></label></li>`).join("")}}</ul>`
+          : `<p class="manager-empty">${{managerMessages.manager_empty}}</p>`;
+        managerShared.innerHTML = data.shared.length
+          ? `<ul class="manager-library-list">${{data.shared.map((item) => `<li class="manager-library-card"><span class="manager-library-name">${{managerEscape(item.name)}}</span><span class="manager-meta">${{formatBytes(item.size)}}</span><details><summary>${{managerMessages.manager_file_details}}</summary><code>${{managerEscape(item.name)}}</code></details></li>`).join("")}}</ul>`
+          : `<p class="manager-library-empty">${{managerMessages.manager_library_empty}}</p>`;
+        managerContent.hidden = false;
+        updateManagerControls();
+      }}
+      function renderNetworkStatus(states) {{
+        managerNetworkStates.innerHTML = ["ed2k", "kad", "peer_access"].map((key) => `<div class="manager-network-state">${{managerEscape(key === "peer_access" ? managerMessages.manager_peers : key === "ed2k" ? "eD2K" : "Kad")}}<strong>${{managerEscape(statusLabels[states[key]] || statusLabels.unknown)}}</strong></div>`).join("");
+      }}
+      async function loadManager() {{
+        const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
+        if (!response.ok) throw new Error("queue");
+        renderManager(await response.json());
+        try {{
+          const network = await fetch(readiness.dataset.statusUrl, {{ cache: "no-store" }});
+          if (!network.ok) throw new Error("network");
+          renderNetworkStatus(await network.json());
+        }} catch {{
+          managerNetworkStates.innerHTML = `<p class="manager-library-empty">${{managerMessages.manager_network_unavailable}}</p>`;
+        }}
+      }}
+      function bootstrapTokenFromFragment() {{
+        return new URLSearchParams(window.location.hash.slice(1)).get("admin-bootstrap");
+      }}
+      managerBootstrapCopy?.addEventListener("click", async () => {{
+        if (!bootstrapTokenFromFragment()) {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = managerMessages.manager_bootstrap_missing;
+          return;
+        }}
+        try {{
+          await navigator.clipboard.writeText(window.location.href);
+          managerFeedback.dataset.kind = "success";
+          managerFeedback.textContent = managerMessages.manager_bootstrap_copied;
+        }} catch {{
+          managerFeedback.dataset.kind = "error";
+          managerFeedback.textContent = managerMessages.manager_bootstrap_copy_failed;
+        }}
+      }});
+      async function openManagerSession(login) {{
+        managerCsrf = (await login.json()).csrf_token;
+        if (managerPassword) managerPassword.value = "";
+        await loadManager();
+        managerAuth.hidden = true;
+        document.getElementById("manager-bootstrap")?.setAttribute("hidden", "");
+        managerSession.hidden = false;
+        setManagerFeedback(managerMessages.manager_loaded);
+      }}
+      managerBootstrapOpen?.addEventListener("click", async () => {{
+        const token = bootstrapTokenFromFragment();
+        if (!token) {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); return; }}
+        managerBootstrapOpen.disabled = true;
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        try {{
+          const login = await fetch("../admin/bootstrap", {{
+            method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ token }})
+          }});
+          if (!login.ok) throw new Error("bootstrap");
+          await openManagerSession(login);
+        }} catch {{
+          setManagerFeedback(managerMessages.manager_load_failed, "error");
+        }} finally {{
+          managerBootstrapOpen.disabled = false;
+        }}
+      }});
+      managerLoad?.addEventListener("click", async () => {{
+        setManagerFeedback(managerMessages.manager_loading, "success", false);
+        try {{
+          const login = await fetch(
+            `${{managerApiBase}}/${{ingressSso ? "ingress-session" : "session"}}`,
+            ingressSso
+              ? {{ method: "POST" }}
+              : {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }}
+          );
+          if (!login.ok) throw new Error("login");
+          await openManagerSession(login);
+        }} catch {{
+          setManagerFeedback(managerMessages.manager_load_failed, "error");
+        }}
+      }});
+      managerRefresh.addEventListener("click", async () => {{
+        managerRefresh.disabled = true;
+        setManagerFeedback(managerMessages.manager_loading, "success", false);
+        try {{ await loadManager(); setManagerFeedback(managerMessages.manager_loaded); }}
+        catch {{ setManagerFeedback(managerMessages.manager_load_failed, "error"); }}
+        finally {{ managerRefresh.disabled = false; }}
+      }});
+      managerDownloads.addEventListener("change", updateManagerControls);
+      managerCancelOpen.addEventListener("click", () => {{
+        if (!selectedDownloads().length) return;
+        managerCancelPanel.hidden = false;
+        managerCancelConfirm.textContent = managerMessages.manager_cancel_confirm;
+        managerConfirmation.focus();
+      }});
+      managerConfirmation.addEventListener("input", () => {{
+        managerCancelConfirm.disabled = managerConfirmation.value !== cancellationPhrase();
+      }});
+      document.querySelectorAll('[data-manager-action="pause"], [data-manager-action="resume"]').forEach((button) => button.addEventListener("click", async () => {{
+        const hashes = selectedDownloads();
+        const action = button.dataset.managerAction;
+        if (!managerCsrf || !hashes.length) return;
+        try {{
+          const response = await fetch(`${{managerApiBase}}/downloads`, {{
+            method: "PATCH", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes, action }})
+          }});
+          if (!response.ok) throw new Error("mutation");
+          await loadManager();
+          setManagerFeedback(action === "pause" ? managerMessages.manager_pause_completed : managerMessages.manager_resume_completed);
+        }} catch {{ setManagerFeedback(managerMessages.manager_update_failed, "error"); }}
+      }}));
+      managerCancelConfirm.addEventListener("click", async () => {{
+        const hashes = selectedDownloads();
+        if (!managerCsrf || !hashes.length || managerConfirmation.value !== cancellationPhrase()) return;
+        try {{
+          const response = await fetch(`${{managerApiBase}}/downloads`, {{
+            method: "DELETE", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes, confirmation: managerConfirmation.value }})
+          }});
+          if (!response.ok) throw new Error("mutation");
+          await loadManager();
+          setManagerFeedback(managerMessages.manager_cancel_completed);
+        }} catch {{ setManagerFeedback(managerMessages.manager_cancel_failed, "error"); }}
+      }});
+    """
+        if ingress_sso
+        else ""
+    )
+
+    manager_styles = (
+        """\
+      .manager-settings { overflow: hidden; margin-top: 1.5rem; border: 1px solid rgba(124,227,160,.28); border-radius: 1rem; background: linear-gradient(135deg, rgba(26, 67, 51, .5), rgba(5, 12, 24, .5)); box-shadow: 0 .8rem 2rem rgba(0,0,0,.14); }
+      .manager-settings summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 1.2rem; color: #fff; background: rgba(124,227,160,.08); cursor: pointer; list-style: none; }
+      .manager-settings summary::-webkit-details-marker { display: none; }
+      .manager-title { font-size: 1.1rem; font-weight: 850; letter-spacing: -.015em; }
+      .manager-subtitle { color: #9fdcb4; font-size: .76rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+      .manager-settings > .profile-content { padding-top: 1.2rem; }
+      .manager-settings .manager-intro { margin: 0; color: #c6d4c9; font-size: .9rem; line-height: 1.55; }
+      .profile-content { display: grid; gap: 1rem; padding: 0 1.1rem 1.1rem; }
+      .profile-content p { margin: 0; color: #9dacbd; font-size: .88rem; line-height: 1.5; }
+      .profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }
+      .profile-group { display: grid; gap: .9rem; margin: 0; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .8rem; }
+      .profile-group legend { padding: 0 .35rem; color: #dbe5f0; font-size: .8rem; font-weight: 800; }
+      .profile-content input, .profile-content select { width: 100%; margin-top: .45rem; padding: .72rem; border: 1px solid rgba(255,255,255,.16); border-radius: .65rem; color: #edf2f7; background: #09111f; font: inherit; }
+      .profile-content input[type="checkbox"] { width: auto; margin: 0 .45rem 0 0; accent-color: #7ce3a0; }
+      .profile-content label { margin: 0; }
+      .checkbox-label { display: flex; align-items: center; color: #dbe5f0; font-size: .9rem; font-weight: 700; }
+      .field-hint { color: #8190a4; font-size: .75rem; font-weight: 400; }
+      .profile-feedback, .action-feedback { min-height: 1.25rem; color: #9dacbd; font-size: .85rem; line-height: 1.45; }
+      .profile-feedback[data-kind="success"], .action-feedback[data-kind="success"] { color: #8eeaac; }
+      .profile-feedback[data-kind="error"], .action-feedback[data-kind="error"] { color: #f0a0a0; }
+      #download-manager [hidden] { display: none !important; }
+      #download-manager .manager-session { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .75rem 0; }
+      #download-manager .manager-session strong { color: #8eeaac; font-size: .9rem; }
+      #download-manager .manager-feedback { min-height: 1.25rem; }
+      #download-manager .manager-empty, #download-manager .manager-library-empty { margin: 0; padding: 1rem; border-radius: .75rem; background: rgba(255,255,255,.055); color: #b9c5d4; }
+      #download-manager .manager-download-list, #download-manager .manager-library-list { display: grid; gap: .6rem; margin: 0; padding: 0; list-style: none; }
+      #download-manager .manager-download-row, #download-manager .manager-library-card { min-width: 0; padding: .8rem; border: 1px solid rgba(255,255,255,.1); border-radius: .75rem; background: rgba(5,12,24,.28); }
+      #download-manager .manager-download-row label { display: flex; align-items: flex-start; gap: .65rem; margin: 0; }
+      #download-manager .manager-download-name, #download-manager .manager-library-name { overflow-wrap: anywhere; color: #fff; font-weight: 750; }
+      #download-manager .manager-meta { display: block; margin-top: .2rem; color: #9dacbd; font-size: .78rem; font-weight: 500; }
+      #download-manager .manager-toolbar { display: grid; gap: .7rem; margin-top: 1rem; }
+      #download-manager .manager-selection-count { color: #9dacbd; font-size: .82rem; }
+      #download-manager .manager-toolbar .actions { margin: 0; }
+      #download-manager .button.destructive { border-color: rgba(240,160,160,.5); color: #fff; background: #9e3740; }
+      #download-manager .button.destructive:hover { background: #bd4852; }
+      #download-manager .button:disabled { cursor: not-allowed; opacity: .52; }
+      #download-manager .manager-cancel-panel { display: grid; gap: .7rem; padding: 1rem; border: 1px solid rgba(240,160,160,.45); border-radius: .8rem; background: rgba(104,24,35,.24); }
+      #download-manager .manager-cancel-panel h4, #download-manager .manager-cancel-panel p { margin: 0; }
+      #download-manager .manager-library-card details { margin-top: .55rem; color: #9dacbd; font-size: .78rem; }
+      #download-manager .manager-library-card summary { cursor: pointer; }
+      #download-manager .manager-library-card code { margin-top: .45rem; padding: .55rem; font-size: .74rem; }
+      #download-manager .manager-network { margin-top: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .8rem; }
+      #download-manager .manager-network summary { padding: .85rem; color: #fff; font-weight: 750; cursor: pointer; }
+      #download-manager .manager-network-body { display: grid; gap: .7rem; padding: 0 .85rem .85rem; }
+      #download-manager .manager-network-states { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+      #download-manager .manager-network-state { padding: .55rem; border-radius: .55rem; background: rgba(255,255,255,.055); color: #9dacbd; font-size: .72rem; }
+      #download-manager .manager-network-state strong { display: block; margin-top: .15rem; color: #edf2f7; font-size: .8rem; }
+    """
+        if ingress_sso
+        else ""
+    )
+
     return f"""<!doctype html>
 <html lang="{locale}">
   <head>
@@ -1091,26 +1418,7 @@ def _configuration_page(
       .hint strong {{ color: #dbe5f0; }}
       .profile-settings {{ margin-top: 1.5rem; border: 1px solid rgba(255,255,255,.1); border-radius: 1rem; background: rgba(5, 12, 24, .32); }}
       .profile-settings summary {{ padding: 1rem 1.1rem; color: #fff; font-weight: 800; cursor: pointer; }}
-      .manager-settings {{ overflow: hidden; margin-top: 1.5rem; border: 1px solid rgba(124,227,160,.28); border-radius: 1rem; background: linear-gradient(135deg, rgba(26, 67, 51, .5), rgba(5, 12, 24, .5)); box-shadow: 0 .8rem 2rem rgba(0,0,0,.14); }}
-      .manager-settings summary {{ display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 1.2rem; color: #fff; background: rgba(124,227,160,.08); cursor: pointer; list-style: none; }}
-      .manager-settings summary::-webkit-details-marker {{ display: none; }}
-      .manager-title {{ font-size: 1.1rem; font-weight: 850; letter-spacing: -.015em; }}
-      .manager-subtitle {{ color: #9fdcb4; font-size: .76rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }}
-      .manager-settings > .profile-content {{ padding-top: 1.2rem; }}
-      .manager-settings .manager-intro {{ margin: 0; color: #c6d4c9; font-size: .9rem; line-height: 1.55; }}
-      .profile-content {{ display: grid; gap: 1rem; padding: 0 1.1rem 1.1rem; }}
-      .profile-content p {{ margin: 0; color: #9dacbd; font-size: .88rem; line-height: 1.5; }}
-      .profile-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem; }}
-      .profile-group {{ display: grid; gap: .9rem; margin: 0; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .8rem; }}
-      .profile-group legend {{ padding: 0 .35rem; color: #dbe5f0; font-size: .8rem; font-weight: 800; }}
-      .profile-content input, .profile-content select {{ width: 100%; margin-top: .45rem; padding: .72rem; border: 1px solid rgba(255,255,255,.16); border-radius: .65rem; color: #edf2f7; background: #09111f; font: inherit; }}
-      .profile-content input[type="checkbox"] {{ width: auto; margin: 0 .45rem 0 0; accent-color: #7ce3a0; }}
-      .profile-content label {{ margin: 0; }}
-      .checkbox-label {{ display: flex; align-items: center; color: #dbe5f0; font-size: .9rem; font-weight: 700; }}
-      .field-hint {{ color: #8190a4; font-size: .75rem; font-weight: 400; }}
-      .profile-feedback, .action-feedback {{ min-height: 1.25rem; color: #9dacbd; font-size: .85rem; line-height: 1.45; }}
-      .profile-feedback[data-kind="success"], .action-feedback[data-kind="success"] {{ color: #8eeaac; }}
-      .profile-feedback[data-kind="error"], .action-feedback[data-kind="error"] {{ color: #f0a0a0; }}
+      {manager_styles}
       footer {{ margin-top: 1.5rem; color: #8190a4; font-size: .78rem; text-align: center; }}
       @media (max-width: 36rem) {{ main {{ padding-top: 2rem; }} .language {{ margin-top: .5rem; }} .features, .profile-grid {{ grid-template-columns: 1fr; }} .feature {{ min-height: auto; }} .status-grid {{ grid-template-columns: repeat(2, 1fr); }} .button {{ width: 100%; }} }}
     </style>
@@ -1199,26 +1507,7 @@ def _configuration_page(
             <div class="profile-feedback" id="profile-feedback" role="status"></div>
           </form>
         </details>
-        <details class="manager-settings" id="download-manager"{manager_hidden}>
-          <summary><span class="manager-title">Download manager</span><span class="manager-subtitle">Queue and library</span></summary>
-          <div class="profile-content">
-            <p class="manager-intro">This protected area manages active downloads. Completed shared files are read-only.</p>
-            {bootstrap_action}
-            {manager_auth}
-            <div id="manager-feedback" class="profile-feedback" role="status"></div>
-            <form id="manager-form" hidden>
-              <div id="manager-downloads"></div>
-              <label for="manager-confirmation">To cancel selected downloads, type <code>CANCELAR N</code> using the selected count.</label>
-              <input id="manager-confirmation" type="text" autocomplete="off">
-              <div class="actions">
-                <button class="button secondary" type="button" data-manager-action="pause">Pause selected</button>
-                <button class="button secondary" type="button" data-manager-action="resume">Resume selected</button>
-                <button class="button" type="button" data-manager-action="cancel">Cancel selected</button>
-              </div>
-            </form>
-            <h3>Completed shared library</h3><div id="manager-shared"></div>
-          </div>
-        </details>
+        {manager_section}
       </section>
       <footer>{t("footer")}</footer>
     </main>
@@ -1234,7 +1523,7 @@ def _configuration_page(
       const readiness = document.getElementById("readiness");
       const readinessHint = document.getElementById("readiness-hint");
       const statusLabels = {status_labels};
-      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_limited", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
+      const readinessMessages = {json.dumps({key: translate(locale, key) for key in ("readiness_hint_disconnected", "readiness_hint_connecting", "readiness_hint_limited", "readiness_hint_peer_unknown", "readiness_hint_unavailable", "readiness_hint_ready")}, ensure_ascii=False).replace("</", "<\\/")};
       function setActionFeedback(message, kind) {{
         actionFeedback.textContent = message;
         actionFeedback.dataset.kind = kind;
@@ -1269,7 +1558,7 @@ def _configuration_page(
           if (states.amuleapi !== "connected") hints.push(readinessMessages.readiness_hint_unavailable);
           if (states.ed2k === "disconnected") hints.push(readinessMessages.readiness_hint_disconnected);
           if (states.kad === "connecting") hints.push(readinessMessages.readiness_hint_connecting);
-          if (states.peer_access === "limited") hints.push(readinessMessages.readiness_hint_limited);
+          if (states.peer_access === "unknown") hints.push(readinessMessages.readiness_hint_peer_unknown);
           readinessHint.textContent = hints.length ? hints.join(" ") : readinessMessages.readiness_hint_ready;
         }})
         .catch(() => {{
@@ -1329,118 +1618,7 @@ def _configuration_page(
           profileSubmit.textContent = "{t("create_profile")}";
         }}
       }});
-      const managerLoad = document.getElementById("manager-load");
-      const managerBootstrapOpen = document.getElementById("manager-bootstrap-open");
-      const managerBootstrapCopy = document.getElementById("manager-bootstrap-copy");
-      const managerPassword = document.getElementById("manager-password");
-      const ingressSso = {str(ingress_sso).lower()};
-      const managerFeedback = document.getElementById("manager-feedback");
-      const managerForm = document.getElementById("manager-form");
-      const managerDownloads = document.getElementById("manager-downloads");
-      const managerShared = document.getElementById("manager-shared");
-      const managerConfirmation = document.getElementById("manager-confirmation");
-      let managerCsrf = null;
-      // Ingress exposes the app under a per-session prefix. A parent-relative
-      // URL would escape that prefix; direct and tokenized pages retain the
-      // parent-relative API location.
-      const managerApiBase = ingressSso ? "admin" : "../admin";
-      const managerEscape = (value) => String(value).replace(/[&<>\"]/g, (c) => ({{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }}[c]));
-      const selectedDownloads = () => Array.from(document.querySelectorAll(".manager-download:checked")).map((input) => input.value);
-      function renderManager(data) {{
-        managerDownloads.innerHTML = data.downloads.length ? data.downloads.map((item) => `<label class="checkbox-label"><input class="manager-download" type="checkbox" value="${{managerEscape(item.hash)}}">${{managerEscape(item.name)}} — ${{managerEscape(item.status)}} (${{item.size_done}} / ${{item.size}} bytes)</label>`).join("") : "<p>No active downloads.</p>";
-        managerShared.innerHTML = data.shared.length ? `<ul>${{data.shared.map((item) => `<li>${{managerEscape(item.name)}} (${{item.size}} bytes)</li>`).join("")}}</ul>` : "<p>No completed shared files.</p>";
-        managerForm.hidden = false;
-      }}
-      async function loadManager() {{
-        const response = await fetch(`${{managerApiBase}}/downloads`, {{ cache: "no-store" }});
-        if (!response.ok) throw new Error("queue");
-        renderManager(await response.json());
-      }}
-      function bootstrapTokenFromFragment() {{
-        return new URLSearchParams(window.location.hash.slice(1)).get("admin-bootstrap");
-      }}
-      managerBootstrapCopy?.addEventListener("click", async () => {{
-        if (!bootstrapTokenFromFragment()) {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = "Open the operator-provided management link first.";
-          return;
-        }}
-        try {{
-          await navigator.clipboard.writeText(window.location.href);
-          managerFeedback.dataset.kind = "success";
-          managerFeedback.textContent = "Management link copied. Its token remains in the URL fragment.";
-        }} catch {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = "Could not copy the management link.";
-        }}
-      }});
-      managerBootstrapOpen?.addEventListener("click", async () => {{
-        const token = bootstrapTokenFromFragment();
-        if (!token) {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = "Open the operator-provided management link first.";
-          return;
-        }}
-        managerBootstrapOpen.disabled = true;
-        managerFeedback.textContent = "";
-        // Fragments are not sent in HTTP requests or Referer headers. Remove it
-        // before processing the response so it cannot be copied accidentally later.
-        history.replaceState(null, "", window.location.pathname + window.location.search);
-        try {{
-          const login = await fetch("../admin/bootstrap", {{
-            method: "POST", headers: {{ "Content-Type": "application/json" }},
-            body: JSON.stringify({{ token }})
-          }});
-          if (!login.ok) throw new Error("bootstrap");
-          managerCsrf = (await login.json()).csrf_token;
-          await loadManager();
-          managerFeedback.dataset.kind = "success";
-          managerFeedback.textContent = "Admin manager opened.";
-        }} catch {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = "Could not open the admin manager.";
-        }} finally {{
-          managerBootstrapOpen.disabled = false;
-        }}
-      }});
-      managerLoad?.addEventListener("click", async () => {{
-        managerFeedback.textContent = "";
-        try {{
-          const login = await fetch(
-            `${{managerApiBase}}/${{ingressSso ? "ingress-session" : "session"}}`,
-            ingressSso
-              ? {{ method: "POST" }}
-              : {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{ password: managerPassword.value }}) }}
-          );
-          if (!login.ok) throw new Error("login");
-          managerCsrf = (await login.json()).csrf_token;
-          if (managerPassword) managerPassword.value = "";
-          await loadManager();
-          managerFeedback.dataset.kind = "success";
-          managerFeedback.textContent = "Queue loaded.";
-        }} catch {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = "Could not authenticate or load the queue.";
-        }}
-      }});
-      document.querySelectorAll("[data-manager-action]").forEach((button) => button.addEventListener("click", async () => {{
-        const hashes = selectedDownloads();
-        const action = button.dataset.managerAction;
-        if (!managerCsrf || !hashes.length) {{ managerFeedback.textContent = "Select at least one active download."; return; }}
-        const options = {{ method: action === "cancel" ? "DELETE" : "PATCH", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }} }};
-        options.body = JSON.stringify(action === "cancel" ? {{ hashes, confirmation: managerConfirmation.value }} : {{ hashes, action }});
-        try {{
-          const response = await fetch(`${{managerApiBase}}/downloads`, options);
-          if (!response.ok) throw new Error("mutation");
-          managerConfirmation.value = "";
-          await loadManager();
-          managerFeedback.dataset.kind = "success";
-          managerFeedback.textContent = `${{action}} request completed.`;
-        }} catch {{
-          managerFeedback.dataset.kind = "error";
-          managerFeedback.textContent = action === "cancel" ? "Cancellation failed. Type the exact CANCELAR N confirmation and refresh selections." : "Queue update failed; refresh selections.";
-        }}
-      }}));
+      {manager_script}
     </script>
   </body>
 </html>"""

@@ -61,10 +61,6 @@ class Settings(BaseSettings):
     default_show_stream_sources: bool = True
     default_show_stream_language: bool = True
     default_show_stream_technical_details: bool = True
-    # This is declarative, not a NAT probe. It lets the readiness UI state
-    # the expected reachability when an installation intentionally does not
-    # expose aMule's optional inbound peer ports.
-    inbound_peer_ports_enabled: bool | None = None
     search_query_limit: int = Field(default=3, ge=1, le=5)
     # eD2K global searches commonly need several seconds before the first
     # server replies. Prefer a useful listing over a fast, empty response.
