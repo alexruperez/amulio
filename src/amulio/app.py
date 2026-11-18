@@ -1000,17 +1000,18 @@ async def _revalidated_library_paths(
         candidate = _safe_library_candidate_path(
             str(Path(detail.path) / detail.name), settings=settings
         )
+        # Only a truly missing final path is stale.  A FIFO, symlink, bad
+        # permissions or another unsafe/inaccessible filesystem object must
+        # still be rejected by _safe_media_path rather than treated as deleted.
+        if not candidate.exists():
+            resolved.append((file_hash, None))
+            continue
+        path = _safe_media_path(str(candidate), settings=settings)
         try:
-            path = _safe_media_path(str(candidate), settings=settings)
             size_matches = path.name == detail.name and path.stat().st_size == detail.size
-        except HTTPException as exc:
-            if exc.status_code == status.HTTP_404_NOT_FOUND:
-                # The selected entry is stale, not a failed delete.  Keep its
-                # verified metadata so the caller can request an index reload.
-                resolved.append((file_hash, None))
-                continue
-            raise
-        except OSError:
+        except FileNotFoundError:
+            # The file vanished after the existence check.  This concurrent
+            # removal is safe to reconcile as an idempotent deletion.
             resolved.append((file_hash, None))
             continue
         if not size_matches:

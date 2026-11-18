@@ -1,3 +1,5 @@
+import os
+
 from fastapi.testclient import TestClient
 
 from amulio.app import app
@@ -259,5 +261,30 @@ def test_completed_library_delete_rejects_a_shared_path_outside_media_roots(monk
         )
         assert response.status_code == 403
         assert (outside_root / "finished.mkv").exists()
+        assert fake.reloads == 0
+    get_settings.cache_clear()
+
+
+def test_completed_library_delete_rejects_non_regular_shared_file(monkeypatch, tmp_path):
+    configure_admin(monkeypatch)
+    media_root = tmp_path / "incoming"
+    media_root.mkdir()
+    monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(media_root))
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        fake = StaleSharedLibraryApi(media_root)
+        fifo = media_root / "finished.mkv"
+        fifo.unlink()
+        os.mkfifo(fifo)
+        app.state.amule_api = fake
+        csrf = login(client)
+        response = client.request(
+            "DELETE",
+            "/admin/library",
+            headers={"X-CSRF-Token": csrf},
+            json={"hashes": [fake.file_hash]},
+        )
+        assert response.status_code == 404
+        assert fifo.exists()
         assert fake.reloads == 0
     get_settings.cache_clear()
