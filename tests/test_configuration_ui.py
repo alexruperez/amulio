@@ -85,10 +85,10 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
     manager_box = page.locator("#download-manager").bounding_box()
     assert tip_box is not None and manager_box is not None
     assert manager_box["y"] >= tip_box["y"] + tip_box["height"] + 20
-    expect(page.locator("#download-manager summary")).to_contain_text("Queue and library")
+    expect(page.locator("#download-manager > summary")).to_contain_text("Queue and library")
 
     page.goto(configuration_server + "#admin-bootstrap=" + "b" * 32)
-    page.locator("#download-manager summary").click()
+    page.locator("#download-manager > summary").click()
     with page.expect_response(
         lambda response: (
             response.url.endswith("/admin/bootstrap") and response.request.method == "POST"
@@ -131,3 +131,67 @@ def test_configuration_page_is_responsive_keyboard_accessible_and_creates_profil
     second_label = page.locator(".profile-grid label").nth(1).bounding_box()
     assert first_label is not None and second_label is not None
     assert first_label["x"] == second_label["x"]
+
+
+@pytest.mark.ui
+def test_download_manager_mobile_states_are_localized_and_safe(
+    configuration_server: str, browser: Browser
+):
+    page: Page = browser.new_page(viewport={"width": 375, "height": 812})
+    queue = {"downloads": [], "shared": []}
+    mutations: list[str] = []
+
+    def mock_downloads(route):
+        if route.request.method == "GET":
+            route.fulfill(status=200, json=queue)
+            return
+        mutations.append(route.request.method)
+        route.fulfill(status=200, json={"results": []})
+
+    page.route("**/admin/downloads", mock_downloads)
+    page.goto(configuration_server + "?lang=es")
+    page.locator("#download-manager > summary").click()
+    page.locator("#manager-password").fill("a" * 32)
+    page.locator("#manager-load").click()
+    expect(page.locator("#manager-session")).to_be_visible()
+    expect(page.locator("#manager-feedback")).to_have_attribute("aria-live", "polite")
+    expect(page.locator(".manager-empty")).to_contain_text("No hay descargas activas")
+    expect(page.locator("#manager-toolbar")).to_be_hidden()
+    expect(page.locator("#manager-cancel-panel")).to_be_hidden()
+
+    queue.update(
+        {
+            "downloads": [
+                {
+                    "hash": "a" * 32,
+                    "name": "Una-descarga-muy-larga-para-comprobar-el-ajuste-en-movil.mkv",
+                    "size": 2048,
+                    "size_done": 1024,
+                    "status": "downloading",
+                }
+            ],
+            "shared": [{"hash": "b" * 32, "name": "Original.Release.Name.mkv", "size": 1024}],
+        }
+    )
+    page.locator("#manager-refresh").click()
+    expect(page.locator(".manager-download")).to_have_count(1)
+    expect(page.locator('[data-manager-action="pause"]')).to_be_disabled()
+    expect(page.locator("#manager-cancel-open")).to_be_disabled()
+    expect(page.locator(".manager-library-card")).to_contain_text("1 KiB")
+    expect(page.locator(".manager-library-card details")).to_contain_text(
+        "Original.Release.Name.mkv"
+    )
+
+    page.locator(".manager-download").check()
+    expect(page.locator('[data-manager-action="pause"]')).to_be_enabled()
+    expect(page.locator("#manager-cancel-open")).to_be_enabled()
+    expect(page.locator("#manager-selection-count")).to_contain_text("1 seleccionadas")
+    page.locator("#manager-cancel-open").click()
+    expect(page.locator("#manager-cancel-panel")).to_be_visible()
+    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
+    page.locator("#manager-confirmation").fill("CANCELAR 2")
+    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
+    page.locator("#manager-confirmation").fill("CANCELAR 1")
+    expect(page.locator("#manager-cancel-confirm")).to_be_enabled()
+    assert mutations == []
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

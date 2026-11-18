@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from amulio.app import AMULE_LOGO_VERSION, app
-from amulio.config import get_settings
+from amulio.config import Settings, get_settings
 from amulio.models import Candidate
 from amulio.profiles import ProfilePreferences
 
@@ -147,7 +147,7 @@ def test_configuration_readiness_is_private_and_exposes_only_safe_connection_sta
     monkeypatch.setenv("AMULIO_TOKEN_SECRET", "s" * 32)
     monkeypatch.setenv("AMULE_API_ADMIN_PASSWORD", "test-password")
     monkeypatch.setenv("AMULIO_ALLOWED_MEDIA_ROOTS", str(tmp_path))
-    monkeypatch.setenv("AMULIO_INBOUND_PEER_PORTS_ENABLED", "false")
+
     get_settings.cache_clear()
 
     with TestClient(app) as client:
@@ -161,11 +161,12 @@ def test_configuration_readiness_is_private_and_exposes_only_safe_connection_sta
         "amuleapi": "connected",
         "ed2k": "connected",
         "kad": "connecting",
-        "peer_access": "limited",
+        "peer_access": "unknown",
         "incoming_storage": "ready",
         "public_url": "configured",
     }
     assert "password" not in readiness.text
+    assert "inbound_peer_ports_enabled" not in Settings.model_fields
     assert rejected.status_code == 404
     get_settings.cache_clear()
 
