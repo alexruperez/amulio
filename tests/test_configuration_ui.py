@@ -126,6 +126,7 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     queue = {"downloads": [], "shared": []}
     mutations: list[str] = []
     library_mutations: list[str] = []
+    cancel_dialogs: list[str] = []
     delete_dialogs: list[str] = []
 
     def mock_downloads(route):
@@ -149,6 +150,10 @@ def test_download_manager_mobile_states_are_localized_and_safe(
         delete_dialogs.append(dialog.message)
         dialog.accept()
 
+    def accept_download_cancel(dialog):
+        cancel_dialogs.append(dialog.message)
+        dialog.accept()
+
     page.route("**/admin/downloads", mock_downloads)
     page.route("**/admin/library", mock_library)
     page.route("**/configure/status", mock_network_status)
@@ -165,7 +170,6 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     expect(page.locator("#manager-feedback")).to_have_attribute("aria-live", "polite")
     expect(page.locator(".manager-empty")).to_contain_text("No hay descargas activas")
     expect(page.locator("#manager-toolbar")).to_be_hidden()
-    expect(page.locator("#manager-cancel-panel")).to_be_hidden()
 
     queue.update(
         {
@@ -205,26 +209,20 @@ def test_download_manager_mobile_states_are_localized_and_safe(
     expect(page.locator('[data-manager-action="pause"]')).to_be_enabled()
     expect(page.locator("#manager-cancel-open")).to_be_enabled()
     expect(page.locator("#manager-selection-count")).to_contain_text("1 seleccionadas")
-    page.locator("#manager-cancel-open").click()
-    expect(page.locator("#manager-cancel-panel")).to_be_visible()
-    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
-    page.locator("#manager-confirmation").fill("CANCELAR 2")
-    expect(page.locator("#manager-cancel-confirm")).to_be_disabled()
-    page.locator("#manager-confirmation").fill("CANCELAR 1")
-    expect(page.locator("#manager-cancel-confirm")).to_be_enabled()
     assert mutations == []
+    page.once("dialog", accept_download_cancel)
     with page.expect_request(
         lambda request: request.url.endswith("/admin/downloads") and request.method == "DELETE"
     ) as delete_request:
-        page.locator("#manager-cancel-confirm").click()
+        page.locator("#manager-cancel-open").click()
     request = delete_request.value
     expect(page.locator("#manager-feedback")).to_contain_text("Cancelación completada")
     assert mutations == ["DELETE"]
+    assert len(cancel_dialogs) == 1
+    assert "Cancelar descargas seleccionadas" in cancel_dialogs[0]
+    assert "1 seleccionadas" in cancel_dialogs[0]
     assert request.header_value("X-CSRF-Token")
-    assert request.post_data_json == {
-        "hashes": ["a" * 32],
-        "confirmation": "CANCELAR 1",
-    }
+    assert request.post_data_json == {"hashes": ["a" * 32]}
 
     page.locator(".manager-library").check()
     expect(page.locator("#manager-library-selection-count")).to_contain_text(

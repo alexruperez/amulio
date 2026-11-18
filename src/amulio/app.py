@@ -784,10 +784,6 @@ class DownloadStatusRequest(DownloadSelectionRequest):
     action: str
 
 
-class DownloadCancelRequest(DownloadSelectionRequest):
-    confirmation: str
-
-
 class ProfileInstallationResponse(BaseModel):
     manifest_url: str
 
@@ -871,11 +867,21 @@ async def managed_downloads(request: Request, api: ApiClient):
     _require_admin_session(request)
     try:
         downloads, shared = await asyncio.gather(api.downloads(), api.shared_files())
+        active_hashes = {
+            item["hash"].lower()
+            for item in downloads
+            if item.get("status") != "completed" and isinstance(item.get("hash"), str)
+        }
         return {
             "downloads": [
                 public_download(item) for item in downloads if item.get("status") != "completed"
             ],
-            "shared": [public_shared_file(item) for item in shared],
+            "shared": [
+                public_shared_file(item)
+                for item in shared
+                if not isinstance(item.get("hash"), str)
+                or item["hash"].lower() not in active_hashes
+            ],
         }
     except (AmuleApiError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="aMule queue is unavailable") from exc
@@ -901,12 +907,12 @@ async def manage_download_status(body: DownloadStatusRequest, request: Request, 
 
 
 @app.delete("/admin/downloads")
-async def cancel_managed_downloads(body: DownloadCancelRequest, request: Request, api: ApiClient):
+async def cancel_managed_downloads(
+    body: DownloadSelectionRequest, request: Request, api: ApiClient
+):
     """Cancel only active aMule partfiles; completed shared files are never deleted."""
     _require_csrf(request)
     hashes = body.normalized_hashes()
-    if not secrets.compare_digest(body.confirmation, f"CANCELAR {len(hashes)}"):
-        raise HTTPException(status_code=422, detail="Type the exact cancellation confirmation")
     try:
         downloads = await api.downloads()
         require_active_selection(hashes, downloads)
@@ -1108,8 +1114,6 @@ def _configuration_page(
                 "manager_cancel",
                 "manager_cancel_title",
                 "manager_cancel_warning",
-                "manager_cancel_prompt",
-                "manager_cancel_confirm",
                 "manager_cancel_failed",
                 "manager_update_failed",
                 "manager_library_empty",
@@ -1156,12 +1160,6 @@ def _configuration_page(
                   <button class="button secondary" type="button" data-manager-action="resume" disabled>{t("manager_resume")}</button>
                   <button class="button destructive" type="button" id="manager-cancel-open" data-destructive="true" disabled></button>
                 </div>
-                <section id="manager-cancel-panel" class="manager-cancel-panel" hidden aria-labelledby="manager-cancel-title">
-                  <h4 id="manager-cancel-title"></h4><p id="manager-cancel-warning"></p>
-                  <label id="manager-cancel-prompt" for="manager-confirmation"></label>
-                  <input id="manager-confirmation" type="text" autocomplete="off">
-                  <button class="button destructive" type="button" id="manager-cancel-confirm" data-destructive="true" disabled></button>
-                </section>
               </div>
               <details class="manager-network" id="manager-network">
                 <summary>{t("manager_network")}</summary>
@@ -1200,12 +1198,6 @@ def _configuration_page(
       const managerLibrarySelectionCount = document.getElementById("manager-library-selection-count");
       const managerLibraryDelete = document.getElementById("manager-library-delete");
       const managerCancelOpen = document.getElementById("manager-cancel-open");
-      const managerCancelPanel = document.getElementById("manager-cancel-panel");
-      const managerCancelTitle = document.getElementById("manager-cancel-title");
-      const managerCancelWarning = document.getElementById("manager-cancel-warning");
-      const managerCancelPrompt = document.getElementById("manager-cancel-prompt");
-      const managerCancelConfirm = document.getElementById("manager-cancel-confirm");
-      const managerConfirmation = document.getElementById("manager-confirmation");
       const managerNetworkStates = document.getElementById("manager-network-states");
       let managerCsrf = null;
       let managerFeedbackTimer = null;
@@ -1228,17 +1220,11 @@ def _configuration_page(
       }};
       const selectedDownloads = () => Array.from(managerDownloads.querySelectorAll(".manager-download:checked")).map((input) => input.value);
       const selectedLibrary = () => Array.from(managerShared.querySelectorAll(".manager-library:checked"));
-      const cancellationPhrase = () => `CANCELAR ${{selectedDownloads().length}}`;
       function setManagerFeedback(message, kind = "success", transient = true) {{
         window.clearTimeout(managerFeedbackTimer);
         managerFeedback.dataset.kind = kind;
         managerFeedback.textContent = message;
         if (transient && message) managerFeedbackTimer = window.setTimeout(() => {{ managerFeedback.textContent = ""; }}, 3200);
-      }}
-      function resetCancellation() {{
-        managerCancelPanel.hidden = true;
-        managerConfirmation.value = "";
-        managerCancelConfirm.disabled = true;
       }}
       function updateManagerControls() {{
         const count = selectedDownloads().length;
@@ -1247,10 +1233,6 @@ def _configuration_page(
         managerToolbar.querySelectorAll('[data-manager-action="pause"], [data-manager-action="resume"]').forEach((button) => {{ button.disabled = !count; }});
         managerCancelOpen.disabled = !count;
         managerCancelOpen.textContent = managerMessages.manager_cancel.replace("{{count}}", count);
-        managerCancelTitle.textContent = managerMessages.manager_cancel_title;
-        managerCancelWarning.textContent = managerMessages.manager_cancel_warning;
-        managerCancelPrompt.textContent = managerMessages.manager_cancel_prompt.replace("{{confirmation}}", cancellationPhrase());
-        resetCancellation();
       }}
       function updateLibraryControls() {{
         const selected = selectedLibrary();
@@ -1310,15 +1292,6 @@ def _configuration_page(
       }});
       managerDownloads.addEventListener("change", updateManagerControls);
       managerShared.addEventListener("change", updateLibraryControls);
-      managerCancelOpen.addEventListener("click", () => {{
-        if (!selectedDownloads().length) return;
-        managerCancelPanel.hidden = false;
-        managerCancelConfirm.textContent = managerMessages.manager_cancel_confirm;
-        managerConfirmation.focus();
-      }});
-      managerConfirmation.addEventListener("input", () => {{
-        managerCancelConfirm.disabled = managerConfirmation.value !== cancellationPhrase();
-      }});
       document.querySelectorAll('[data-manager-action="pause"], [data-manager-action="resume"]').forEach((button) => button.addEventListener("click", async () => {{
         const hashes = selectedDownloads();
         const action = button.dataset.managerAction;
@@ -1332,12 +1305,13 @@ def _configuration_page(
           setManagerFeedback(action === "pause" ? managerMessages.manager_pause_completed : managerMessages.manager_resume_completed);
         }} catch {{ setManagerFeedback(managerMessages.manager_update_failed, "error"); }}
       }}));
-      managerCancelConfirm.addEventListener("click", async () => {{
+      managerCancelOpen.addEventListener("click", async () => {{
         const hashes = selectedDownloads();
-        if (!managerCsrf || !hashes.length || managerConfirmation.value !== cancellationPhrase()) return;
+        const confirmation = `${{managerMessages.manager_cancel_title}}\n\n${{managerMessages.manager_selected.replace("{{count}}", hashes.length)}}\n${{managerMessages.manager_cancel_warning}}`;
+        if (!managerCsrf || !hashes.length || !window.confirm(confirmation)) return;
         try {{
           const response = await fetch(`${{managerApiBase}}/downloads`, {{
-            method: "DELETE", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes, confirmation: managerConfirmation.value }})
+            method: "DELETE", headers: {{ "Content-Type": "application/json", "X-CSRF-Token": managerCsrf }}, body: JSON.stringify({{ hashes }})
           }});
           if (!response.ok) throw new Error("mutation");
           await loadManager();
@@ -1402,8 +1376,6 @@ def _configuration_page(
       #download-manager .button.destructive { border-color: rgba(240,160,160,.5); color: #fff; background: #9e3740; }
       #download-manager .button.destructive:hover { background: #bd4852; }
       #download-manager .button:disabled { cursor: not-allowed; opacity: .52; }
-      #download-manager .manager-cancel-panel { display: grid; gap: .7rem; padding: 1rem; border: 1px solid rgba(240,160,160,.45); border-radius: .8rem; background: rgba(104,24,35,.24); }
-      #download-manager .manager-cancel-panel h4, #download-manager .manager-cancel-panel p { margin: 0; }
       #download-manager .manager-library-card details { margin-top: .55rem; color: #9dacbd; font-size: .78rem; }
       #download-manager .manager-library-card summary { cursor: pointer; }
       #download-manager .manager-library-card code { margin-top: .45rem; padding: .55rem; font-size: .74rem; }
